@@ -1,0 +1,1832 @@
+---
+title: "Script au propre Sulfates"
+format: html
+editor: visual
+---
+
+# Import packages
+
+```{r}
+options(download.file.method = "wininet") 
+#install.packages("ggplot2", method = "wininet") 
+library("ggplot2", character.only = TRUE) 
+#install.packages("openxlsx", method = "wininet") 
+library("openxlsx", character.only = TRUE, options("openxlsx.dateFormat" = "mm/dd/yyyy")) 
+#install.packages("rmarkdown",method="wininet")
+library("rmarkdown")
+#install.packages("tidyr", method = "wininet") 
+library(MASS)
+library("tidyr", character.only = TRUE) 
+#install.packages("dplyr", method = "wininet") 
+library("dplyr", character.only = TRUE) 
+library(purrr)
+
+#install.packages("randomForest", method = "wininet") 
+library(randomForest)
+
+#install.packages("maptree", method = "wininet") 
+library(maptree)
+
+#install.packages("caret", method = "wininet") 
+library(caret)
+
+#install.packages("StatMatch", method = "wininet")
+library("StatMatch")
+library(lubridate)
+
+#install.packages("VIM", method="wininet")
+library(VIM)
+
+#install.packages("simputation", method="wininet")
+library(simputation)
+
+library(hms)
+library(ordinal)
+
+library("xgboost")
+library(ranger)
+#install.packages("StatMatch", method="wininet")
+library(StatMatch)
+
+library(ROSE)
+#install.packages("Factoshiny", method = "wininet")
+#library(FactoMiner)
+library(Factoshiny)
+```
+
+# Import données Sulfates et chlorures
+
+```{r}
+chemin = "S:/DPH/07 - DATASCIENCE/6-Process_qualite/Scripts + rapport Clément Barcaroli/Concentration Sulfate/"
+
+
+importer_donnees_sulfates = function(chemin_fichier){
+  data = read.xlsx(chemin_fichier)
+  
+  # Renommage des colonnes avec la première ligne
+  colnames(data) = as.character(data[1, ])
+  data = data[-1, ]
+  
+  # Conversion de la date
+  data$`Date de prélèvement` = as.Date(as.numeric(data$`Date de prélèvement`), origin = "1899-12-30")
+  
+  
+  return(data)
+}
+
+data_S04_Ves = importer_donnees_sulfates(paste0(chemin,"/Données sulfates et conductivités Vésubie.xlsx"))
+data_S04_Ray = importer_donnees_sulfates(paste0(chemin,"/Données sulfates et conductivités J. RAYBAUD.xlsx"))
+
+temperature_ves = read.xlsx(paste0(chemin,"Données températures in situ Vesubie et Raybaud.xlsx"),sheet = 1,colNames=TRUE,detectDates = TRUE,startRow = 2)
+temperature_ves = temperature_ves %>% dplyr::select(Date.de.prélèvement,Résultat) %>% group_by(Date.de.prélèvement) %>%  summarise(temperature = round(mean(Résultat, na.rm = TRUE),digits=2), .groups = "drop")
+
+temperature_ray = read.xlsx(paste0(chemin,"Données températures in situ Vesubie et Raybaud.xlsx"),sheet = 2,colNames=TRUE,detectDates = TRUE,startRow = 2)
+temperature_ray = temperature_ray %>% dplyr::select(Date.de.prélèvement,Résultat) %>% group_by(Date.de.prélèvement) %>%  summarise(temperature = round(mean(Résultat, na.rm = TRUE),digits=2), .groups = "drop")
+```
+
+Ajoutons les données de température
+
+```{r}
+data_S04_Ray = data_S04_Ray %>% rename('jour'='Date de prélèvement')
+temperature_ray = temperature_ray %>% rename('jour'= Date.de.prélèvement)
+data_S04_Ray = merge(data_S04_Ray,temperature_ray, by="jour")
+
+data_S04_Ves = data_S04_Ves %>% rename('jour'='Date de prélèvement')
+temperature_ves = temperature_ves %>% rename('jour'= Date.de.prélèvement)
+data_S04_Ves = merge(data_S04_Ves,temperature_ves, by="jour")
+rm(temperature_ray,temperature_ves)
+```
+
+# Import données météo
+
+D'abord on charge les RData. L'import est plus long car les RData d'origine sont tous sauvegardés sous le même nom, impossible de tous les importer d'un coup proprement
+
+```{r}
+load(paste0(chemin,"Météo/meteofr_HorQuot.RData"))
+meteo_ante_2023 = meteo_horquot
+load(paste0(chemin,'Météo/meteoFrAPI_06075007.RData'))
+meteo_Levens = meteo_horquot #Levens
+load(paste0(chemin,'Météo/meteoFrAPI_06088001.RData'))
+meteo_Nice = meteo_horquot #Nice
+load(paste0(chemin,'Météo/meteoFrAPI_06103002.RData'))
+meteo_Berthemont = meteo_horquot #BERTHEMONT-LES-BAINS_SAPC
+load(paste0(chemin,'Météo/meteoFrAPI_06120004.RData'))
+meteo_St_Et = meteo_horquot #Saint-Et
+
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06005001.RData'))
+meteo_Ascros = meteo_horquot
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06033002.RData'))
+meteo_Carros = meteo_horquot        
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06050002.RData'))
+meteo_Coursegoules = meteo_horquot 
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06074005.RData'))
+meteo_Lantosque = meteo_horquot 
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06077006.RData'))
+meteo_Luceram = meteo_horquot 
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06081001.RData'))
+meteo_Le_mas = meteo_horquot
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06094002.RData'))
+meteo_Peone = meteo_horquot
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06099004.RData'))
+meteo_Puget = meteo_horquot
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06102001.RData'))
+meteo_Rimplas = meteo_horquot
+
+
+load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06125001.RData'))
+meteo_Saint_martin_dentraunes = meteo_horquot
+meteo_Saint_martin_dentraunes= meteo_Saint_martin_dentraunes %>% filter((date != "2022-12-31" | rr1 != 0.0) & (date != "2020-12-31" | rr1 != 0.0)) #doublons pour 2022 12 31 et 2020 12 31
+
+meteo_St_martin = read.csv(paste0(chemin,'Météo/CSV St Martin/meteo_St_martin.csv')) #J'ai créé ce csv à partir de plusieurs xls. Le script complet est dispo ici : "insérer" Script pluvio St Martin.R
+meteo_St_martin$jour=as.Date(meteo_St_martin$jour)
+meteo_St_martin$St_martin=round(meteo_St_martin$St_martin,2)
+rm(meteo_horquot)
+```
+
+On traite d'abord le df de l'ancien API de Météo France.
+
+```{r}
+df=meteo_ante_2023[meteo_ante_2023$jour>=as.Date('2000-01-07'),] #on n'a pas besoin des observations d'avant ce jour
+df_wide = spread(df, key = nom_usuel, value = rr) #tidyr mon amour, on éclate la colonne des sites de relevés météos en 3 variables 
+df_meteo_avant_2023 = df_wide %>% group_by(jour) %>% summarise(across(everything(), ~ first(na.omit(.x))), .groups = "drop") #on fusionne les lignes qui correspondent à la même date
+colnames(df_meteo_avant_2023)=c('jour','num_poste','Levens','Nice','St_Et')
+rm(df,df_wide)
+
+#On obtient un df avec en première colonne la date et les autres colonnes contiennent les relevés pluvio pour chaque station
+```
+
+On crée une base météo unique
+
+```{r}
+get_nom_ville <- function(df) {
+  # Récupère le nom de l'objet passé en argument
+  nom_objet <- deparse(substitute(df))
+  
+  # Supprime le préfixe "meteo_" pour garder uniquement le nom de la ville
+  nom_ville <- sub("^meteo_", "", nom_objet)
+  
+  return(nom_ville)
+}
+
+
+liste_meteo <- list(
+  meteo_Nice = meteo_Nice,
+  meteo_Levens = meteo_Levens,
+  meteo_St_Et = meteo_St_Et,
+  meteo_Carros = meteo_Carros,
+  meteo_Coursegoules = meteo_Coursegoules,
+  meteo_Lantosque = meteo_Lantosque,
+  meteo_Le_mas = meteo_Le_mas,
+  meteo_Luceram = meteo_Luceram,
+  meteo_Peone = meteo_Peone,
+  meteo_Rimplas = meteo_Rimplas,
+  meteo_Saint_martin_dentraunes = meteo_Saint_martin_dentraunes,
+  meteo_Puget=meteo_Puget,
+  meteo_Ascros = meteo_Ascros
+)
+
+
+vec_meteo = c(meteo_Nice,
+  meteo_Levens,
+  meteo_St_Et,
+  meteo_Carros,
+  meteo_Coursegoules,
+  meteo_Lantosque,
+  meteo_Le_mas,
+  meteo_Luceram,
+  meteo_Peone,
+  meteo_Rimplas,
+  meteo_Saint_martin_dentraunes,
+  meteo_Puget,
+  meteo_Ascros)
+
+
+for (nom_objet in names(liste_meteo)) {
+  df <- liste_meteo[[nom_objet]]
+  nom_ville <- sub("^meteo_", "", nom_objet)
+  colnames(df)[3] <- nom_ville
+  liste_meteo[[nom_objet]] <- df  # Met à jour la liste
+}
+
+for (nom in names(liste_meteo)) {
+  assign(nom, liste_meteo[[nom]])
+}
+
+liste_meteo_sans_poste <- lapply(liste_meteo, function(df) df %>% dplyr::select(-'poste'))
+
+#On fusionne tous les df sur la colonne "date"
+meteo <- reduce(liste_meteo_sans_poste, full_join, by = "date")
+
+#On met jour en permier pouis les stations météo
+meteo <- meteo %>%
+  dplyr::select(date, sort(names(.)[names(.) != "date"]))
+colnames(meteo)[1] = "jour"
+meteo = bind_rows(meteo,df_meteo_avant_2023)
+
+#Ces lignes servent à corriger un problème étrange causé par la fusion de l'ancien et du nouvel API
+meteo =  meteo %>%
+  group_by(jour) %>%
+  summarise(across(everything(), ~ {
+    # Supprimer les NA et prendre la première valeur non manquante
+    vals <- .x[!is.na(.x)]
+    if (length(vals) > 0) vals[1] else NA
+  }), .groups = "drop")
+meteo = meteo %>% dplyr::select(-num_poste)
+meteo = left_join(meteo,meteo_St_martin)
+
+rm(meteo_ante_2023,meteo_Ascros,meteo_Berthemont,meteo_Carros,meteo_Coursegoules,meteo_Lantosque,meteo_Le_mas,meteo_Levens,meteo_Luceram,meteo_Nice,meteo_Peone,meteo_Puget,meteo_Rimplas,meteo_Saint_martin_dentraunes,meteo_St_Et,meteo_St_Martin,vec_meteo,liste_meteo,liste_meteo_sans_poste,df_meteo_avant_2023,df,meteo_St_martin)
+
+summary(meteo)
+```
+
+On opère la fusion entre nos données hydro et nos données météo. Il n'y a quasiment rien à faire sur les bases de la nouvelle API si ce n'est renommer des colonnes.
+
+#### Raybaud
+
+```{r}
+
+
+data_S04_Ray_meteo = merge(data_S04_Ray,meteo, by ="jour")
+```
+
+#### Vésubie
+
+Le point de mesure change selon les périodes, on n'en tient pas compte ici
+
+```{r}
+
+data_S04_Ves_meteo = merge(data_S04_Ves,meteo,by="jour")
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% filter(!is.na(jour))
+
+```
+
+On a nos 2 bases pour nos 2 sites. On sépare maintenant la colonne Résultat en deux colonnes concentration et conductivité
+
+```{r}
+#Pour Raybaud
+bdd1 = data_S04_Ray_meteo %>% filter(grepl("mg",Unité)) #On sépare la base en 2, l'une qui contient la conductivité dans la colonne Résultat, l'autre la concentration
+bdd1 = bdd1 %>% rename('Concentration.mg.L'='Résultat')
+bdd2 = data_S04_Ray_meteo %>% filter(!grepl("mg",Unité))
+bdd2 = bdd2 %>% rename('Conductivité.µS.cm'='Résultat')
+
+#On recolle les bases
+data_S04_Ray_meteo = merge(bdd2,bdd1,by=c('jour','Point de surveillance','temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin'))
+
+#On garde uniquement les colonnes intéressantes
+data_S04_Ray_meteo = data_S04_Ray_meteo %>% dplyr::select(c('jour','Point de surveillance','temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin','Conductivité.µS.cm','Concentration.mg.L'))
+
+
+#Pour Vésubie
+bdd1 = data_S04_Ves_meteo %>% filter(grepl("mg",Unité)) #On sépare la base en 2, l'une qui contient la conductivité dans la colonne Résultat, l'autre la concentration
+bdd1 = bdd1 %>% rename('Concentration.mg.L'='Résultat')
+bdd2 = data_S04_Ves_meteo %>% filter(!grepl("mg",Unité))
+bdd2 = bdd2 %>% rename('Conductivité.µS.cm'='Résultat')
+
+#On recolle les bases
+data_S04_Ves_meteo = merge(bdd2,bdd1,by=c('jour','Point de surveillance','temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin'))
+
+#On garde uniquement les colonnes intéressantes
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% dplyr::select(c('jour','Point de surveillance','temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin','Conductivité.µS.cm','Concentration.mg.L'))
+
+
+#on remplace la valeur du 2020-09-09 car on a une valeur abbérante de 0 de conductivité
+data_S04_Ves_meteo$Conductivité.µS.cm=as.numeric(data_S04_Ves_meteo$Conductivité.µS.cm)
+interv= data_S04_Ves_meteo %>% filter(`Concentration.mg.L` >= 167 & `Concentration.mg.L`<=169 & `Conductivité.µS.cm`!=0)
+
+data_S04_Ves_meteo[1967,'Conductivité.µS.cm']=mean(interv$Conductivité.µS.cm)
+rm(data_S04_Ves,data_S04_Ray,interv,bdd1,bdd2,chemin,nom,nom_objet,nom_ville)
+
+#Les données d'avant mars 2017 ne pourront pas être délayées
+data_S04_Ray_meteo = data_S04_Ray_meteo %>% filter(jour>=as.Date("2017-03-01")) %>% mutate(Conductivité.µS.cm=as.numeric(Conductivité.µS.cm),Concentration.mg.L=as.numeric(Concentration.mg.L))
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% filter(jour>=as.Date("2017-03-01"))%>% mutate(Conductivité.µS.cm=as.numeric(Conductivité.µS.cm),Concentration.mg.L=as.numeric(Concentration.mg.L))
+
+
+```
+
+La variable Point de surveillance n'a pas d'importance (info métier + test de Wallis pour s'en convaincre)
+
+```{r}
+data_S04_Ray_meteo = data_S04_Ray_meteo %>% dplyr::select(-`Point de surveillance`)
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% dplyr::select(-`Point de surveillance`)
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% filter(!is.na(jour))
+```
+
+# Statistiques exploratoires
+
+## Univariées
+
+```{r}
+tracer_variables_par_date = function(df, nom_col_date = "jour") {
+  # Vérifie que la colonne date existe
+  if (!(nom_col_date %in% names(df))) {
+    stop("La colonne date spécifiée n'existe pas dans le dataframe.")
+  }
+
+  # Garde uniquement les colonnes numériques + la colonne date
+  df_filtre = df %>%
+    dplyr::select(all_of(nom_col_date), where(is.numeric)) %>%
+    pivot_longer(-all_of(nom_col_date), names_to = "Variable", values_to = "Valeur")
+
+  # Création du graphique
+  ggplot(df_filtre, aes_string(x = nom_col_date, y = "Valeur")) +
+    geom_line() +
+    facet_wrap(~Variable, scales = "free_y", ncol = 2) +
+    labs(x = "Date", y = "Valeur", title = "Évolution des variables numériques dans le temps") +
+    theme_minimal()
+}
+
+var_interessantes=c('Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin','Conductivité.µS.cm','Concentration.mg.L')
+```
+
+#### Raybaud
+
+```{r}
+
+summary(data_S04_Ray_meteo %>% dplyr::select(c('temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin','Conductivité.µS.cm','Concentration.mg.L')))
+#Il n'y a a priori pas de valeurs extrêmes étranges.Le 1033 semble tout de même élevé
+tracer_variables_par_date(data_S04_Ray_meteo[,c("Conductivité.µS.cm","Concentration.mg.L","jour")], nom_col_date = "jour")
+```
+
+#### Vésubie
+
+```{r}
+
+summary(data_S04_Ves_meteo %>% dplyr::select(c('temperature','Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin','Conductivité.µS.cm','Concentration.mg.L')))
+#Il n'y a a priori pas de valeurs extrêmes étranges.Le 1033 semble tout de même élevé
+tracer_variables_par_date(data_S04_Ves_meteo[,c("Conductivité.µS.cm","Concentration.mg.L","jour")], nom_col_date = "jour")
+```
+
+## Cumul de pluies
+
+Les pluies du jour ne sont pas du tout révélatrices. On construit donc une variable de cumul pour chaque point de relevé. Pour choisir le nombre de jours de recul à prendre, on utilise la fonction ci-dessous qui maximise la corrélation entre le cumul de pluies à un point donné et la concentration. Le bloc ci-dessous met énormément de temps à tourner, pratique pour prendre une pause :)
+
+```{r}
+#On calcule le cumul de pluie pour "lag" jours ici
+fonction_cumul_glissant <- function(df, col, lag, inclure_jour_courant) {
+  nom_colonne_sortie <- paste0("cumul_glissant_", col, "_", lag)
+  
+  df <- df %>%
+    arrange(jour) %>%
+    mutate(
+      !!nom_colonne_sortie := map_dbl(row_number(), function(i) {
+        if (inclure_jour_courant) {
+          end <- i
+          start <- max(1, i - lag + 1)
+        } else {
+          end <- i - 1
+          start <- max(1, i - lag)
+        }
+        if (start > end) return(NA_real_)  # Pas assez de données
+        sum(df[[col]][start:end], na.rm = TRUE)
+      })
+    )
+  
+  return(df)
+}
+
+analyser_correlation_precipitation_cumul <- function(df_mesures, meteo_df, max_lag = 90) {
+  require(dplyr)
+  require(purrr)
+
+  plot_correlation_vs_lag <- function(vec, titre) {
+    lag_values <- seq_along(vec)
+    plot(lag_values, vec, type = "b", pch = 19, col = "steelblue",
+         xlab = "Lag (jours)", ylab = "Corrélation", main = titre,
+         ylim = c(-1, 1))
+    grid()
+  }
+
+  stations <- c('Levens','Nice','St_Et','Ascros','Carros','Coursegoules',
+                'Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas',
+                'Saint_martin_dentraunes','St_martin')
+
+  resultats <- data.frame(
+    station = character(),
+    lag_max = integer(),
+    correlation = numeric(),
+    stringsAsFactors = FALSE
+  )
+
+  for (station in stations) {
+    vec <- numeric(max_lag)
+
+    for (i in 1:max_lag) {
+      meteo_cum <- fonction_cumul_glissant(meteo_df, station, lag = i, inclure_jour_courant = FALSE)
+      nom_colonne <- paste0("cumul_glissant_", station, "_", i)
+
+      # Fusion avec df_mesures
+      df_test_cor <- merge(df_mesures, meteo_cum, by = c("jour", 'Levens','Nice','St_Et','Ascros','Carros',
+                                                         'Coursegoules','Lantosque','Le_mas','Luceram','Peone',
+                                                         'Puget','Rimplas','Saint_martin_dentraunes','St_martin'))
+
+      # Calcul de la corrélation
+      if (all(c('Concentration.mg.L', nom_colonne) %in% names(df_test_cor))) {
+        vec[i] <- cor(df_test_cor[['Concentration.mg.L']], df_test_cor[[nom_colonne]], use = "complete.obs")
+      } else {
+        vec[i] <- NA
+      }
+    }
+
+    plot_correlation_vs_lag(vec, paste("Corrélation entre cumul précipitations à", station, "et concentration à Raybaud"))
+
+    # Trouver le lag max (valeur absolue)
+    if (all(is.na(vec))) {
+      lag_max <- NA
+      corr_max <- NA
+    } else {
+      lag_max <- which.max(abs(vec))
+      corr_max <- vec[lag_max]
+    }
+
+    resultats <- rbind(resultats, data.frame(
+      station = station,
+      lag_max = lag_max,
+      correlation = corr_max,
+      stringsAsFactors = FALSE
+    ))
+  }
+
+  return(resultats)
+}
+
+#resultats_ray = analyser_correlation_precipitation_cumul(data_S04_Ray_meteo,meteo,90)
+#resultats_ves = analyser_correlation_precipitation_cumul(data_S04_Ves_meteo,meteo,90)
+```
+
+Après calcul des lags optimaux pour chaque station, on les ajoute à chaque base
+
+```{r}
+#Ajout des cumuls pour Raybaud
+villes_groupes <- list(
+  `4` = c('Le_mas'),
+  `9`  = c("Peone","St_martin","Saint_martin_dentraunes"),
+  `38` = c('Ascros','Puget','Rimplas'),
+  `54` = c('Carros','Levens'),
+  `39` = c('Nice'),
+  `57` = c('Coursegoules','Lantosque','Luceram'),
+  `89` = c('St_Et')
+)
+
+
+by_vector = c("jour", 'Levens','Nice','St_Et','Ascros','Carros','Coursegoules','Lantosque','Le_mas','Luceram','Peone','Puget','Rimplas','Saint_martin_dentraunes','St_martin')
+
+#On ajoute les colonnes de lag
+for (index in names(villes_groupes)) {
+  villes <- villes_groupes[[index]]
+  for (ville in villes) {
+    df_temp <- fonction_cumul_glissant(meteo, ville, as.numeric(index), TRUE)
+    cols_a_garder <- setdiff(names(df_temp), names(data_S04_Ray_meteo))
+    df_temp <- df_temp[, c(by_vector, cols_a_garder), drop = FALSE]
+    data_S04_Ray_meteo <- merge(data_S04_Ray_meteo, df_temp, by = by_vector, all.x=TRUE)
+  }
+}
+
+
+
+
+#Ajout des cumuls pour la Vésubie
+villes_groupes <- list(
+  `86` = c("Lantosque", "Carros", "Levens"),
+  `43` = c("Peone", "Saint_martin_dentraunes"),
+  `45` = c("St_Et"),  
+  `54` = c("Le_mas", "Puget", "Ascros"),
+  `55` = c("Luceram", "Rimplas"),
+  `87` = c("Nice", "Coursegoules","St_martin")
+)
+
+
+#On ajoute les colonnes de lag 
+for (index in names(villes_groupes)) {
+  villes <- villes_groupes[[index]]
+  for (ville in villes) {
+    df_temp <- fonction_cumul_glissant(meteo, ville, as.numeric(index),TRUE)
+    df_temp <- fonction_cumul_glissant(meteo, ville, as.numeric(index), TRUE)
+    cols_a_garder <- setdiff(names(df_temp), names(data_S04_Ves_meteo))
+    df_temp <- df_temp[, c(by_vector, cols_a_garder), drop = FALSE]
+    
+    data_S04_Ves_meteo <- merge(data_S04_Ves_meteo, df_temp, by = by_vector, all.x = TRUE)
+  }
+}
+
+rm(df_temp,villes_groupes,index,ville,villes) # resultats,
+```
+
+Ce dernier bloc permet de voir la jolie corrélation concentration-conductiviité
+
+```{r}
+
+#graphiques pour voir la relation entre concentration et conductivité
+data_S04_Ray_meteo %>% filter(jour != as.Date("2022-10-04
+")) %>% ggplot(aes(x = Conductivité.µS.cm, y = Concentration.mg.L)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") #+ geom_hline(yintercept = log(200), linetype = "dashed", color = "red") + geom_vline(xintercept = 6, linetype = "dashed", color = "green")
+
+data_S04_Ves_meteo %>% ggplot(aes(x = Conductivité.µS.cm, y = Concentration.mg.L)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") #+ geom_hline(yintercept = log(200), linetype = "dashed", color = "red") + geom_vline(xintercept = 6, linetype = "dashed", color = "green")
+
+#Sur nos deux bases de données, il y a une relation linéaire entre conduc et concentr. 
+
+
+#Calculs des statistiques de corrélation utilisés dans le rapport + répartition de la variable alerte
+cor(data_S04_Ray_meteo$`Conductivité.µS.cm`, data_S04_Ray_meteo$Concentration.mg.L)
+cor(data_S04_Ves_meteo$`Conductivité.µS.cm`, data_S04_Ves_meteo$Concentration.mg.L)
+
+data_S04_Ray_meteo$alerte = as.factor(ifelse(data_S04_Ray_meteo$Concentration.mg.L<=200,0,1))
+summary(data_S04_Ray_meteo$alerte)
+
+data_S04_Ray_meteo$alerte = as.factor(ifelse(data_S04_Ray_meteo$Concentration.mg.L> 200, 2 , ifelse(data_S04_Ray_meteo$Concentration.mg.L >= 180, 1, 0) ))
+
+
+data_S04_Ves_meteo$alerte = as.factor(ifelse(data_S04_Ves_meteo$Concentration.mg.L<=200,0,1))
+summary(data_S04_Ves_meteo$alerte)
+
+data_S04_Ves_meteo$alerte = as.factor(ifelse(data_S04_Ves_meteo$Concentration.mg.L> 200, 2 , ifelse(data_S04_Ves_meteo$Concentration.mg.L >= 180, 1, 0) ))
+```
+
+# Sélection des variables
+
+On réalise une ACP pour chaque base de donnée pour isoler des groupes de stations météo. Pour chaque groupe, on ne garde que celle qui contribue le plus à la construction de la dimension avec laquelle la concentration est bien corrélée. La méthode est surtout visuelle.
+
+[ACP pour la Vésubie]{.underline}
+
+```{r}
+base_acp_Ves = scale(data_S04_Ves_meteo %>% dplyr::select(-c(jour,alerte,
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes,St_martin)))
+
+
+acp_Ves= PCA(base_acp_Ves, quanti.sup="Concentration.mg.L")
+#resshiny = PCAshiny(acp_Ves)
+plot(acp_Ves, choix = "var", axes = c(1,2))
+plot(acp_Ves, choix = "var", axes = c(2,3))
+#La concentration est correlée aux dimensions 1 et 3.
+
+acp_Ves$var  
+cor.test(data_S04_Ves_meteo$Concentration.mg.L,data_S04_Ves_meteo$temperature) 
+
+acp_Ves$quanti.sup$cor
+
+```
+
+La concentration est bien corrélée avec la dimension 1. Voir rapport pour connaître les groupes constitués et les variables gardées
+
+[ACP pour J. Raybaud]{.underline}
+
+```{r}
+#| label: ACP A. Raybaud
+base_acp_Ray = scale(data_S04_Ray_meteo %>% dplyr::select(-c(jour,alerte,
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes,St_martin)))
+
+
+acp_Ray= PCA(base_acp_Ray, quanti.sup="Concentration.mg.L")
+#resshiny = PCAshiny(acp_Ray)
+plot(acp_Ray, choix = "var", axes = c(1,2))
+plot(acp_Ray, choix = "var", axes = c(2,3))
+#La concentration est correlée aux dimensions 1 et 3.
+
+acp_Ray$var  
+cor.test(data_S04_Ray_meteo$Concentration.mg.L,data_S04_Ray_meteo$temperature)
+```
+
+On crée les groupes en fonction des dimensions 2 et 3 puis de la dim 1
+
+Groupe 1 :
+
+St-Et
+
+Groupe 2 :
+
+St-Martin
+
+Groupe 3 :
+
+Ascros, Rimplas, Puget, Lantosque, Nice, Luceram, Levens, Carros, Coursegoules (max contrib)
+
+Groupe 4 :
+
+Le Mas, Entraunes, Péone (max contrib)
+
+On garde temperature, St-Et, St-Martin, Coursegoules, Péone et Conductivité\
+
+# Modèles prédictifs
+
+## Random Forest
+
+#### Raybaud
+
+Ce dataframe souffre de sa taille, la précision est donc relativement faible
+
+```{r}
+#On crée un df à part pour ne pas modifier la base d'origine avec les variables qu'on a décidé de garder auparavant
+rf_dataframe_ray <- data_S04_Ray_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(-c(jour,
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes, St_martin, cumul_glissant_Le_mas_4,cumul_glissant_Saint_martin_dentraunes_9, cumul_glissant_Ascros_38, cumul_glissant_Puget_38, cumul_glissant_Rimplas_38, cumul_glissant_Carros_54, cumul_glissant_Levens_54, cumul_glissant_Nice_39, cumul_glissant_Lantosque_57, cumul_glissant_Luceram_57 )) %>% mutate ( alerte = as.factor ( ifelse ( Concentration.mg.L> 200, 1 , 0 ) ) )
+
+
+
+summary(rf_dataframe_ray$alerte)
+```
+
+```{r}
+#On a des NA dans notre df, ce que Random Forest n'apprécie pas. Comme ce n'est pas du missing at random, je fais le choix (questionnable) de supprimer les observations d'avant 2017.
+
+set.seed(4543) #pour la reproductibilité
+
+#On tire des numéros de ligne aléatoires pour créer l'ensemble d'entraînement
+index_ech = sample(seq_len(nrow(rf_dataframe_ray)), size = 0.8 * nrow(rf_dataframe_ray))
+
+df_train = rf_dataframe_ray[index_ech, ]
+df_test = rf_dataframe_ray[-index_ech, ]
+
+```
+
+```{r}
+#calcul du modèle
+rf.fit = randomForest(Concentration.mg.L ~ . - alerte
+                      ,data=df_train, ntree=1000, importance=TRUE)
+
+
+df_test$predict = predict(object=rf.fit,newdata=df_test)
+rmse =  sqrt(mean((df_test$Concentration.mg.L - df_test$predict)^2))
+rmse #=12,2 sur un nombre d'observations très faible donc pas parlant
+
+df_test$erreur = df_test$predict - df_test$Concentration.mg.L
+
+
+#Pour voir le bais du modèle : les prédictions sous-estiment de manière croissante la concentrtation
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = erreur)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Erreur de prédiction en fonction de la concentration réelle",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur de prédiction (prédiction - réel)")
+
+
+#Pour vérifier si l'erreur est normale ou pas, mais trop peu d'observations de test à disposition
+df_test %>% ggplot(aes(x = erreur)) + geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) 
+
+
+#Pour voir l'évolution de la valeur absolue de l'erreur
+df_test = df_test %>% mutate(abs_erreur=abs(erreur)) 
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = abs_erreur)) +
+  geom_point(alpha = 0.4, color = "darkorange") +
+  geom_smooth(method = "loess", se = FALSE, color = "black") +
+  labs(title = "Erreur absolue vs concentration réelle",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur absolue")
+```
+
+On essaye de voir si ce modèle peut servir de modèle d'alerte
+
+```{r}
+df_test = df_test %>% mutate(predict_alerte = as.factor ( ifelse ( predict > 200, 1 , 0 ) )  ) 
+df_erreur = df_test %>% filter(predict_alerte != alerte)
+confusionMatrix(df_test$predict_alerte,df_test$alerte)
+
+#Très peu performant au-dessus de 200 mg/L
+```
+
+Ce modèle ne peut pas réaliser de bonne classification mais n'est pas mauvais en prédictions.
+
+#### Vésubie
+
+Même chose pour la Vésubie
+
+```{r}
+set.seed(124) #pour la reproductibilité
+
+rf_dataframe_ves <- data_S04_Ves_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(-c(jour,
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes, St_martin,cumul_glissant_Ascros_54 , cumul_glissant_Carros_86, cumul_glissant_Le_mas_54 ,  cumul_glissant_Nice_87
+                       , cumul_glissant_St_Et_45 , cumul_glissant_Levens_86, cumul_glissant_Rimplas_55, cumul_glissant_St_martin_87
+                      , cumul_glissant_Saint_martin_dentraunes_43 )) %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L> 200, 1 , 0)))
+
+index_ech = sample(seq_len(nrow(rf_dataframe_ves)), size = 0.8 * nrow(rf_dataframe_ves))
+df_train = rf_dataframe_ves[index_ech, ]
+df_test = rf_dataframe_ves[-index_ech, ]
+
+summary(rf_dataframe_ves$alerte)
+```
+
+Modèle standard Random Forest
+
+```{r}
+rf.fit = randomForest(`Concentration.mg.L` ~. -alerte
+                      , data=df_train )
+
+df_test$predict = predict(rf.fit,df_test)
+rmse =  sqrt(mean((df_test$Conductivité.µS.cm - df_test$predict)^2))
+rmse
+
+df_test$erreur = df_test$predict - df_test$Concentration.mg.L
+
+#Graph de l'évolution de l'erreur, biais positif puis négatif
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = erreur)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  labs(title = "Erreur de prédiction en fonction de la concentration réelle",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur de prédiction (prédiction - réel)")
+
+#Quasi-normalité de l'erreur, youpi. Bosse inexpliquée
+df_test %>% ggplot(aes(x = erreur)) + geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) 
+
+df_test = df_test %>% mutate(abs_erreur=abs(erreur)) 
+
+#Graph évolution valeur absolue de l'erreur, assez constante
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = abs_erreur)) +
+  geom_point(alpha = 0.4, color = "darkorange") +
+  geom_smooth(method = "loess", se = FALSE, color = "black") +
+  labs(title = "Erreur absolue vs concentration réelle",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur absolue")
+
+
+
+#Matrice de confusion pour alerte ternaire
+df_test$alerte= as.factor(ifelse(df_test$Concentration.mg.L>200,2,  ifelse(df_test$Concentration.mg.L>=180,1,0)  ) )
+df_test$predict_alerte = as.factor(ifelse(df_test$predict>200,2,  ifelse(df_test$predict>=180,1,0)  ) )
+df_test$erreur = df_test$predict-df_test$Concentration.mg.L
+df_erreur = df_test %>% filter(predict_alerte!=alerte)
+confusionMatrix(df_test$predict_alerte,df_test$alerte)
+
+
+#Calcul du score F1 avec modification du poids de chaque erreur
+conf <- as.matrix(table(Predicted = df_test$predict_alerte, Actual = df_test$alerte))
+
+#Matrice de pondération des erreurs (ligne = prédit, colonne = factuel)
+#Plus le poids est proche de 0 et plus l'erreur est pénalisante (pour s'en convaincre, calculer la statistique F1 avec un coefficient pour une erreur et regarder sa variation)
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      #prédiction = 2
+), nrow = 3, byrow = TRUE)
+#Les poids sont déterminés par les besoins métiers
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+```
+
+## Cluster - classification
+
+Ici, l'idée est de cuisiner un peu pour augmenter la précision de nos prédictions. Comme ce qui nous intéresse est de savoir s'il faut qu'il y ait une alerte ou pas, prédire le taux de sulphates est peut-être trop gourmand.
+
+On commence par réaliser un clustering pour identifier les différents "types" d'observations qui peuvent exister. On entraîne ensuite un algo de classification sur ces types plutôt que sur les valeurs de conductivité pour pouvoir écarter dès le départ des observations qui ont un niveau d'alerte évident. Ensuite, reste à prédire la concentration des observations ambigues pour finir le travail.
+
+### Raybaud
+
+#### Clustering
+
+Comme la base est particulièrement petite, on utilise l'algo ROSE pour créer plus d'observations pour df_train. Ceci permet de ne prendre que 60% de la base d'origine plutôt que 80%, on teste donc avec davantage de données les modèles. La méthode fonctionne mal au global, le clustering n'est pas fiable.
+
+```{r}
+set.seed(200)
+
+
+#Séparation en train/test (60%-40%)
+base_cah_Ray <- rf_dataframe_ray
+index_ech <- sample(seq_len(nrow(base_cah_Ray)), size = 0.6 * nrow(base_cah_Ray))
+df_train <- base_cah_Ray[index_ech, ]
+df_test  <- base_cah_Ray[-index_ech, ]
+
+#Standardisation des variables (ROSE fonctionne avec des données normalisées)
+vars_predict <- setdiff(names(df_train), "alerte")
+scaled_train <- scale(df_train[, vars_predict])
+
+#On garde en mémoire les paramètres de standarisation pour déstandariser à l'étape finale
+means <- attr(scaled_train, "scaled:center")
+sds   <- attr(scaled_train, "scaled:scale")
+
+df_train_clust <- as.data.frame(scaled_train)
+df_train_clust$alerte <- df_train$alerte #Alerte sert de cible pour ROSE
+
+#ROSE, j'en profite pour demander un échantillon équilibrer par rapport à alerte (p=0,5). L'équilibre est réalisé avec alerte encodée en binaire !
+library(ROSE)
+df_train_clust <- ROSE(alerte ~ ., data = df_train_clust, seed = 42, N = 400, p = 0.5)$data
+
+#Déstandarisation de toute la base
+X_temp <- df_train_clust[, vars_predict]
+X_temp <- sweep(X_temp, 2, sds, `*`)
+X_temp <- sweep(X_temp, 2, means, `+`)
+
+
+#ROSE n'est pas parfait et peut produire des données négatives, on les supprime ici. C'est assez bricolage, le mieux serait d'avoir plus de données et de ne pas à avoir à faire ça
+vars_positives <- c("cumul_glissant_Peone_9", "cumul_glissant_St_martin_9", 
+                    "cumul_glissant_Coursegoules_57", "cumul_glissant_St_Et_89")
+valid_rows <- apply(X_temp[, vars_positives], 1, function(x) all(x >= 0))
+df_train_clust <- df_train_clust[valid_rows, ]
+X_temp <- X_temp[valid_rows, ]
+
+#Déstandarisation de la base qui contient uniquement les valeurs positives
+X_synthetic <- df_train_clust[, vars_predict]
+X_synthetic <- sweep(X_synthetic, 2, sds, `*`)
+X_synthetic <- sweep(X_synthetic, 2, means, `+`)
+
+#Data frame final 
+df_train <- cbind(X_synthetic, alerte = df_train_clust$alerte)
+vars_positives <- c("cumul_glissant_Peone_9", "cumul_glissant_St_martin_9", "cumul_glissant_Coursegoules_57", "cumul_glissant_St_Et_89")
+df_train <- df_train[apply(df_train[, vars_positives], 1, function(x) all(x >= 0)), ]
+
+valid_rows <- apply(df_train[, vars_positives], 1, function(x) all(x >= 0))
+df_train <- df_train[valid_rows, ]
+df_train_clust <- df_train_clust[valid_rows, ]
+
+df_test = base_cah_Ray[-index_ech, ]
+
+
+
+
+
+#Calcul du clsutering
+mat_distance_Ray=as.dist(gower.dist(df_train_clust %>% dplyr::select(-alerte)))
+dendo=hclust(mat_distance_Ray ,method="ward.D2")
+kgs(dendo, mat_distance_Ray, alpha=1, maxclust=10) #on prend le nombre de clusgters avec l'inertie minimale : 5
+plot(dendo,labels=FALSE,main="Dendogramme")
+rect.hclust(dendo,5,border="blue") 
+
+#on ajoute une colonne avec le tag de chaque observation
+clusters = cutree(dendo, k = 5)
+df_train = df_train %>% mutate(groupe=as.factor(clusters))
+```
+
+On obtient donc 5 clusters différents, il faut désormais identifier à quels cas de figures ils correspondent.
+
+```{r}
+df_train %>% group_by(groupe) %>% summarise(across(where(is.numeric), list(
+    moyenne = mean
+  ), na.rm = TRUE))
+table(df_train$groupe, df_train$alerte)
+
+
+```
+
+Les clusters sont assez différents dans leurs compositions. Le groupe 3 ne contient que des non-alertes et le groupe 5 que des alertes.
+
+#### Random Forest
+
+```{r}
+set.seed(2)
+
+#On crée un premier modèle qui permet d'attribuer à un cluster chaque observation. Ce faisant, on retrouve une partie de l'information contenue dans nos clusters qui provient de la concentration. 
+
+rf.fit = randomForest(`groupe` ~ Conductivité.µS.cm +
+                        temperature +
+                        cumul_glissant_Peone_9 + 
+                        cumul_glissant_St_Et_89 +
+                        cumul_glissant_Coursegoules_57 +
+                        cumul_glissant_St_martin_9, data=df_train, ntree=1000, importance=TRUE)
+
+df_train_2 = df_train %>% filter(!(groupe==3|groupe==5))
+
+#On pondère les classes d'alerte car elles restent légèrement déséquilibrées. 
+freq <- table(df_train_2$alerte)
+inv_freq <- 1 / freq
+weights <- inv_freq[as.character(df_train_2$alerte)]
+
+#2nd modèle entraîné uniquement sur les groupes 1 2 4
+rf.2fit <- ranger(
+  formula = Concentration.mg.L ~    . -Concentration.mg.L -alerte
+  ,
+  data = df_train_2,
+  num.trees = 1000,
+  case.weights = weights,
+  importance = "impurity",   # ou "permutation" pour permutation importance
+  probability = F    #important pour récuperer les probas ==> le seuil peut être changé manuellement
+  ,verbose=T
+)
+
+
+
+df_test = df_test %>% mutate( groupe = predict(rf.fit,df_test), alerte = as.factor(ifelse(Concentration.mg.L> 200, 2 , ifelse(Concentration.mg.L >= 180, 1, 0)   ) ) ) #on rajoute les colonnes de groupe et d'alerte
+
+
+df_test$predict_alerte = ifelse(df_test$groupe == 3, 0 , predict(rf.2fit,df_test)$predictions)
+df_test$predict_alerte = ifelse(df_test$groupe == 5, 205 , predict(rf.2fit,df_test)$predictions)
+df_test =df_test %>% mutate(predict_alerte = as.factor(ifelse(predict_alerte> 200, 2 , ifelse(predict_alerte >= 180, 1, 0)   ) ) )
+
+
+confusionMatrix(df_test$predict_alerte,df_test$alerte) 
+
+df_erreur = df_test %>% filter(alerte !=predict_alerte) 
+
+
+#Pour vérifier que l'échantillon respecte la linéarité du départ
+df_train %>% ggplot(aes(x = Conductivité.µS.cm, y = Concentration.mg.L)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black")
+```
+
+### Vésubie
+
+#### Clustering
+
+```{r}
+set.seed(12) #On fixe la graine pour avoir les mêmes clusters à chaque fois
+
+rf_dataframe_ves <- data_S04_Ves_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(-c(jour,
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes, St_martin,cumul_glissant_Ascros_54 , cumul_glissant_Carros_86, cumul_glissant_Le_mas_54 ,  cumul_glissant_Nice_87
+                       , cumul_glissant_St_Et_45 , cumul_glissant_Levens_86, cumul_glissant_Rimplas_55, cumul_glissant_St_martin_87
+                      , cumul_glissant_Saint_martin_dentraunes_43 )) %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L> 200, 1 , 0)))
+base_cah_Ves <- rf_dataframe_ves 
+
+
+
+index_ech = sample(seq_len(nrow(rf_dataframe_ves)), size = 0.8 * nrow(rf_dataframe_ves)) #Split aléatoire de l'échantillon
+df_train <- base_cah_Ves[index_ech, ] #df d'entraînement
+df_train_clust = scale(df_train %>% dplyr::select(-c(alerte))) #df d'entraînement standarisé pour pouvoir être utilisé dans le clustering
+
+df_test = base_cah_Ves[-index_ech, ] #df de test
+
+
+
+
+
+#Calcul du dendogramme
+mat_distance_Ves=as.dist(gower.dist(df_train_clust)) #on calcule la distance entre nos points d'entraînement
+dendo=hclust(mat_distance_Ves,method="ward.D2")
+kgs(dendo, mat_distance_Ves, alpha=1, maxclust=10) #nombre opti de clusters = 4
+
+#Visualisation du dendogramme
+plot(dendo,labels=FALSE,main="Dendogramme")
+rect.hclust(dendo,4,border="blue") 
+
+#on ajoute une colonne avec le tag de chaque observation du df d'entraînement non standarisé
+clusters = cutree(dendo, k = 4)
+df_train = df_train %>% mutate(groupe=as.factor(clusters))
+
+
+vecteur_dates_groupe_1 = df_test[df_test$groupe==1,1]
+
+```
+
+On obtient donc 4 clusters différents, il faut désormais identifier à quels cas de figures ils correspondent.
+
+```{r}
+df_train %>% group_by(groupe) %>% summarise(across(where(is.numeric), list(
+    moyenne = mean
+  ), na.rm = TRUE))
+table(df_train$groupe, df_train$alerte)
+
+```
+
+Les clusters 2 3 et 4 ne contiennent aucune alerte. On part du principe que si une observation est associée à l'un de ces groupes, il n'y aura pas d'alerte
+
+#### Random Forest pour attribuer chaque observation à un groupe
+
+```{r}
+set.seed(12)
+#On crée un premier modèle qui permet d'attribuer à un cluster chaque observation. Ce faisant, on retrouve une partie de l'information contenue dans nos clusters qui provient de la concentration. 
+
+rf.fit_clust = randomForest(`groupe` ~. - Concentration.mg.L - alerte
+                      , data=df_train, ntree=1000, importance=TRUE)
+
+df_test = df_test %>% mutate( groupe = predict(rf.fit_clust,df_test)) #on rajoute les colonnes de groupe (ici ce sont des prédictions) et d'alerte
+
+#Lorsqu'on vérifie manuellement, aucune observation des groupes 2, 3 et 4 ne dépasse les 200 mg/L, la méthode fonctionne bien ici
+
+```
+
+Random Forest binaire
+
+```{r}
+df_train_2 = df_train %>% filter(!(groupe %in% c(2,3,4))) #car on sait que ces groupes ont alerte = 0
+
+
+#On pondère les classes d'alerte car elles restent déséquilibrées. 
+freq <- table(df_train_2$alerte)
+inv_freq <- 1 / freq
+weights <- inv_freq[as.character(df_train_2$alerte)]
+
+
+#2nd modèle entraîné uniquement sur le groupe 1
+rf.2fit_clust <- ranger(
+  formula = Concentration.mg.L ~.  - Concentration.mg.L - alerte   #on s'assure qu'on ne prend pas des variables expliquées. 
+  ,
+  data = df_train_2,
+  num.trees = 1000,
+  case.weights = weights,
+  importance = "impurity",   # ou "permutation" pour permutation importance
+  probability = F    #important pour récuperer les probas ==> le seuil peut être changé manuellement
+)
+
+
+
+
+vecteur_dates_groupe_1 = df_test[df_test$groupe==1,1]
+
+
+df_test$predict = ifelse(df_test$groupe==4 |df_test$groupe==2|df_test$groupe==3 ,0, predict(rf.2fit_clust,df_test)$predictions) #On pose ceci car on n'a pas prédit les valeurs pour les groupes 2 3 4
+
+df_test$predict_alerte=  as.factor(ifelse(df_test$predict>= 200, 1 , 0))
+
+
+
+confusionMatrix(df_test$predict_alerte,df_test$alerte) #Pour regarder les performances du modèle
+
+df_plot = df_test %>% filter(predict>0) #df utilisé pour créer les graphiques juste en-dessous
+
+rmse =  sqrt(mean((df_plot$`Concentration.mg.L` - df_plot$predict)^2))
+rmse
+
+
+df_plot$erreur = df_plot$predict-df_plot$Concentration.mg.L 
+
+df_plot %>% ggplot(aes(x = Concentration.mg.L, y = erreur)) +
+  geom_point(alpha = 0.4, color = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  geom_smooth(method = "loess", se = FALSE, color = "black") +
+  labs(title = "Erreur de prédiction en fonction de la concentration réelle sur le modèle à double régression",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur de prédiction (prédiction - réel)")
+
+
+df_plot %>% ggplot(aes(x = erreur)) + geom_density(fill="#69b3a2", color="#e9ecef", alpha=0.8) 
+
+
+df_plot = df_plot %>% mutate(abs_erreur=abs(erreur)) 
+df_plot %>% ggplot(aes(x = Concentration.mg.L, y = abs_erreur)) +
+  geom_point(alpha = 0.4, color = "darkorange") +
+  geom_smooth(method = "loess", se = FALSE, color = "black") +
+  labs(title = "Erreur absolue vs concentration réelle sur le modèle à double régression",
+       x = "Concentration réelle (mg/L)",
+       y = "Erreur absolue")
+
+
+
+
+
+#Voir chunk 32 pour la tripartition
+```
+
+Random Forest ternaire
+
+```{r}
+
+set.seed(23)
+rf.fit.simple= randomForest(Concentration.mg.L ~ Conductivité.µS.cm + temperature  +cumul_glissant_Lantosque_86 , data=df_train_2 )
+
+
+df_plot$predict=predict(rf.fit.simple,df_plot)
+df_plot$alerte= as.factor(ifelse(df_plot$Concentration.mg.L>200,2,  ifelse(df_plot$Concentration.mg.L>=180,1,0)  ) )
+df_plot$predict_alerte = as.factor(ifelse(df_plot$predict>200,2,  ifelse(df_plot$predict>=180,1,0)  ) )
+df_plot$erreur = df_plot$predict-df_plot$Concentration.mg.L
+df_plot$abs_erreur = abs(df_plot$erreur)
+df_erreur = df_plot %>% filter(predict_alerte!=alerte)
+confusionMatrix(df_plot$predict_alerte,df_plot$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_plot$predict_alerte, df_plot$alerte)$table)
+conf = conf + matrix(c(112,0,0,0,0,0,0,0,0),nrow=3, byrow=TRUE) #On compte aussi les observations qui sont bien classées juste par groupement 
+
+# Matrice de pondération des erreurs (ligne = prédiction, colonne = vérité)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+# Total des prédictions pondérées correctement
+TP_w <- sum(conf * W)
+
+# Total des prédictions possibles (normalisation)
+Total_possible <- sum(conf)
+
+# F1 Gravité-Inversée (ou Recall pondéré)
+F1_GI <- TP_w / Total_possible
+
+cat("F1-GI (Score de précision pondéré selon la gravité des erreurs) :", round(F1_GI, 4), "\n")
+```
+
+GLM
+
+```{r}
+
+library(nlme)
+
+set.seed(23)
+mod <- glm(Concentration.mg.L ~ temperature + Conductivité.µS.cm + cumul_glissant_Lantosque_86 + cumul_glissant_Peone_43 + cumul_glissant_Puget_54 + cumul_glissant_Luceram_55 + cumul_glissant_Coursegoules_87, data = df_train_2, family = gaussian)
+plot(mod$fitted.values, resid(mod), xlab = "Valeurs ajustées", ylab = "Résidus")
+abline(h = 0, col = "red")
+
+df_plot$predict=predict(mod,df_plot)
+df_plot$alerte= as.factor(ifelse(df_plot$Concentration.mg.L>200,2,  ifelse(df_plot$Concentration.mg.L>=180,1,0)  ) )
+df_plot$predict_alerte = as.factor(ifelse(df_plot$predict>200,2,  ifelse(df_plot$predict>=180,1,0)  ) )
+confusionMatrix(df_plot$predict_alerte,df_plot$alerte) #Le RF et le glm ont des performances quasi égales lorsqu'on classifie post-hoc.Le RF capte des interractions complexes qui le rendent plus performant
+
+df_plot$erreur = df_plot$predict - df_plot$Concentration.mg.L
+
+df_plot %>% ggplot(aes(x = Conductivité.µS.cm, y = erreur)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") + geom_hline(yintercept = 0, linetype = "dashed", color = "red") 
+
+
+
+conf <- as.matrix(confusionMatrix(df_plot$predict_alerte, df_plot$alerte)$table)
+conf = conf + matrix(c(112,0,0,0,0,0,0,0,0),nrow=3, byrow=TRUE) #On compte aussi les observations qui sont bien classées juste par groupement
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+```
+
+# Réseau de neuronnes Vésubie
+
+Pour entraîner le modèle , il vaut mieux prendre df_train que df_train_2. Le modèle surestime trop sinon. C'est aussi vrai pour le RF.
+
+```{r}
+library(nnet)
+set.seed(23)
+
+
+
+#choix des var explicatives
+cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_43","cumul_glissant_Puget_54","cumul_glissant_Lantosque_86","cumul_glissant_Luceram_55","cumul_glissant_Coursegoules_87")
+
+#pour standariser/déstandariser 
+means <- sapply(df_train[, cols], mean)
+sds <- sapply(df_train[, cols], sd)
+
+#on est obligé de standariser les vars explicatives pour que les neurones fonctionnent correctement
+X_train <- scale(df_train[, cols], center = means, scale = sds)
+X_test  <- scale(df_plot[, cols], center = means, scale = sds)
+y_train <- df_train$Concentration.mg.L #pas besoin pour l'expliquée (pas d'effet d'échelle)
+
+#entraînement du modèle. size = nbr de neurones, maxit = nombre max d'itérations (On pourrait utiliser 250 plutôt que 300, la convergence est rapide), linout = si on veut une régression, decay = coefficient de perte de mémoire à chaque étape (éviter l'overfitting)
+nn <- nnet(X_train, y_train, size = 7, maxit = 400, linout = TRUE, decay=0.65)
+
+
+
+df_plot$pred_concentration_nnet <- predict(nn, newdata = X_test)
+df_plot$erreur_nnet = df_plot$pred_concentration_nnet - df_plot$Concentration.mg.L
+df_plot %>% ggplot(aes(x = Concentration.mg.L, y = erreur_nnet)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") + geom_hline(yintercept = 0, linetype = "dashed", color = "red") 
+
+
+
+summary(nn) #permet de regarder la convergence de l'algo et la tête qu'à chaque neurone
+
+
+#classification sur les valeurs estimées
+df_plot$alerte= as.factor(ifelse(df_plot$Concentration.mg.L>200,2,  ifelse(df_plot$Concentration.mg.L>=180,1,0)  ) )
+df_plot$predict_alerte_nnet = as.factor(ifelse(df_plot$pred_concentration_nnet>200,2,  ifelse(df_plot$pred_concentration_nnet>=180,1,0)  ) )
+df_plot$erreur = df_plot$pred_concentration_nnet-df_plot$Concentration.mg.L
+df_erreur = df_plot %>% filter(predict_alerte_nnet!=alerte)
+
+
+confusionMatrix(df_plot$predict_alerte_nnet,df_plot$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_plot$predict_alerte_nnet, df_plot$alerte)$table)
+conf = conf + matrix(c(112,0,0,0,0,0,0,0,0),nrow=3, byrow=TRUE) #On compte aussi les observations qui sont bien classées juste par groupement
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+
+
+```
+
+Heatmap :
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(viridis)
+
+# Étape 1 : transformer la table en matrice
+conf_mat <- as.data.frame(conf) %>%
+  pivot_wider(names_from = Reference, values_from = Freq, values_fill = 0) %>%
+  column_to_rownames("Prediction") %>%
+  as.matrix()
+
+# Étape 2 : sommes ligne et colonne
+
+col_sums <- colSums(conf_mat)
+
+# Étape 3 : normalisation corrigée
+norm_mat <- matrix(0, nrow = nrow(conf_mat), ncol = ncol(conf_mat),
+                   dimnames = dimnames(conf_mat))
+
+for (i in 1:nrow(conf_mat)) {
+  for (j in 1:ncol(conf_mat)) {
+    cell <- conf_mat[i, j]
+    denom <- col_sums[j]
+    norm_mat[i, j] <- ifelse(denom == 0, 0, cell / denom)  # éviter division par 0
+  }
+}
+
+# Étape 4 : transformer en format long pour ggplot
+norm_df <- as.data.frame(norm_mat) %>%
+  rownames_to_column("Prediction") %>%
+  pivot_longer(-Prediction, names_to = "Reference", values_to = "Normalized")
+
+# Étape 5 : afficher avec ggplot2
+ggplot(norm_df, aes(x = Reference, y = Prediction, fill = Normalized)) +
+  geom_raster() + 
+  scale_fill_gradient(low="#00f7ff", high = "darkblue") +
+  theme_minimal() +
+  labs(title = "Matrice de confusion normalisée du modèle NNet",
+       x = "Référence",
+       y = "Prédiction",
+       fill = "Ratio") + geom_text(aes(label = round(Normalized, 2)), color = "white", size = 3)
+```
+
+\
+Pour voir les désaccords entre RF et NNet
+
+```{r}
+df_double_erreur = df_plot %>% filter(predict_alerte!=alerte & predict_alerte_nnet!=alerte)
+df_erreur_rf = df_plot %>% filter(predict_alerte!=alerte)
+df_erreur_nnet = df_plot %>% filter(predict_alerte_nnet!=alerte)
+df_erreur = df_plot %>% filter(predict_alerte_nnet != alerte | predict_alerte != alerte)
+```
+
+Visualisation de la précision du NNet et du RF par rapport aux données réelles
+
+```{r}
+
+vec_dates = data_S04_Ves_meteo[-index_ech,] %>% dplyr::select(jour)
+df_test$jour = vec_dates$jour
+vec_dates = df_test[df_test$groupe==1,]$jour
+df_plot$jour = vec_dates
+
+ggplot() +
+  # Ligne pour data_S04_Ves_meteo
+  geom_line(data = data_S04_Ves_meteo, aes(x = jour, y = Concentration.mg.L), color = "steelblue", size = 1) +
+  
+  # Points pour df_test
+  geom_point(data = df_plot, aes(x = jour, y = pred_concentration_nnet), color = "darkorange", size = 2) +
+  
+  geom_point(data = df_plot, aes(x = jour, y = predict), color = "green", size = 2)
+  
+  labs(title = "Valeurs prédites projetées sur les valeurs réelles en fonction du temps",
+       x = "Date",
+       y = "Valeur prédite") +
+  
+  
+  theme_minimal()
+
+```
+
+# Modèles Raybaud
+
+Création des ensembles d'entraînement et de test avec ROSE.
+
+```{r}
+set.seed(23)
+
+#Split 60%-40%
+base_cah_Ray <- rf_dataframe_ray
+index_ech <- sample(seq_len(nrow(base_cah_Ray)), size = 0.6 * nrow(base_cah_Ray))
+df_train <- base_cah_Ray[index_ech, ]
+df_test  <- base_cah_Ray[-index_ech, ]
+
+#Standarisation
+vars_predict <- setdiff(names(df_train), "alerte")
+scaled_train <- scale(df_train[, vars_predict])
+
+means <- attr(scaled_train, "scaled:center") #Pour pouvoir déstandariser
+sds   <- attr(scaled_train, "scaled:scale")
+
+#Créations d'observations avec ROSE
+df_train_clust <- as.data.frame(scaled_train)
+df_train_clust$alerte <- df_train$alerte
+library(ROSE)
+df_train_clust <- ROSE(alerte ~ ., data = df_train_clust, seed = 42, N = 400, p = 0.5)$data
+
+#Tri des nouvelles observations pour s'assurer que les données créées sont positives
+X_temp <- df_train_clust[, vars_predict]
+X_temp <- sweep(X_temp, 2, sds, `*`)
+X_temp <- sweep(X_temp, 2, means, `+`)
+
+vars_positives <- c("cumul_glissant_Peone_9", "cumul_glissant_St_martin_9", 
+                    "cumul_glissant_Coursegoules_57", "cumul_glissant_St_Et_89")
+valid_rows <- apply(X_temp[, vars_positives], 1, function(x) all(x >= 0))
+
+df_train_clust <- df_train_clust[valid_rows, ]
+X_temp <- X_temp[valid_rows, ]
+
+#On déstandarise
+X_synthetic <- df_train_clust[, vars_predict]
+X_synthetic <- sweep(X_synthetic, 2, sds, `*`)
+X_synthetic <- sweep(X_synthetic, 2, means, `+`)
+
+#On contstruit le df d'entraînement final
+df_train <- cbind(X_synthetic, alerte = df_train_clust$alerte)
+vars_positives <- c("cumul_glissant_Peone_9", "cumul_glissant_St_martin_9", "cumul_glissant_Coursegoules_57", "cumul_glissant_St_Et_89")
+df_train <- df_train[apply(df_train[, vars_positives], 1, function(x) all(x >= 0)), ]
+
+valid_rows <- apply(df_train[, vars_positives], 1, function(x) all(x >= 0))
+df_train <- df_train[valid_rows, ]
+```
+
+Clustering
+
+```{r}
+#On part de df_train pour ne pas se faire de noeud au CRAN
+
+set.seed(12) #On fixe la graine pour avoir les mêmes clusters à chaque fois
+base_cah_Ray <- df_train 
+df_train_clust = scale(df_train %>% dplyr::select(-alerte)) #df d'entraînement standarisé pour pouvoir être utilisé dans le clustering
+
+
+#Calcul du dendogramme
+mat_distance_Ves=as.dist(gower.dist(df_train_clust)) #on calcule la distance entre nos points d'entraînement
+dendo=hclust(mat_distance_Ves,method="ward.D2")
+kgs(dendo, mat_distance_Ves, alpha=1, maxclust=10) #nombre opti de clusters = 4
+
+#Visualisation du dendogramme
+plot(dendo,labels=FALSE,main="Dendogramme")
+rect.hclust(dendo,4,border="blue") 
+
+#on ajoute une colonne avec le tag de chaque observation du df d'entraînement non standarisé
+clusters = cutree(dendo, k = 4)
+df_train = df_train %>% mutate(groupe=as.factor(clusters),alerte = as.factor(ifelse(Concentration.mg.L> 200,1,0)))
+
+
+#Sur l'échantillon d'entraînement, on a : 
+#groupe 1 = 50/50
+#groupe 2 = ambigu
+#groupe 3 = 100% 0
+#groupe 4 = 100% 1
+
+df_train_2 = df_train %>% filter(groupe != 3 & groupe != 4) #sous-df d'entrainement
+
+
+rf.fit_clust = randomForest(`groupe` ~. - Concentration.mg.L - alerte
+                      , data=df_train, ntree=1000, importance=TRUE)
+
+
+df_test$groupe = predict(rf.fit_clust, df_test)
+
+table(df_train$groupe, df_train$alerte) 
+table(df_test$groupe, df_test$alerte) 
+#les groupes 3 et 4 sont purs comme pour le df d'entraînement
+
+
+#Le groupement fonctionne bien mais on a vraiment trop peu d'observations pour utiliser cette méthode 
+
+```
+
+RF classification binaire
+
+```{r}
+set.seed(23)
+
+
+
+df_train =df_train %>% mutate(alerte=as.factor(ifelse(Concentration.mg.L>200,1,0) ))
+df_test = df_test %>% mutate(alerte=as.factor(ifelse(Concentration.mg.L>200,1,0) ))
+
+
+prop <- prop.table(table(df_train$alerte))
+class_weights <- setNames(1 / prop, levels(df_train$alerte))
+rf.fit = randomForest(alerte ~.-alerte - Concentration.mg.L ,data=df_train, classwt=class_weights )
+df_test$predict_alerte = predict(rf.fit,df_test)
+confusionMatrix(df_test$predict_alerte,df_test$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_test$predict_alerte,df_test$alerte))
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1, 0.2,   # prédiction = 0
+  0.2,  1      # prédiction = 2
+), nrow = 2, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+```
+
+Logit binaire
+
+```{r}
+
+set.seed(23)
+df_train$alerte <- as.factor(df_train$alerte)
+
+#Evluation modèle
+logit_model <- glm(alerte ~ . - Concentration.mg.L - alerte - cumul_glissant_St_martin_9    , 
+                   data = df_train, 
+                   family = binomial(link = "logit"))
+
+#Coup d'oeil au modèle 
+summary(logit_model)
+
+probs <- predict(logit_model, newdata = df_test, type = "response")
+
+# Binariser les prédictions avec un seuil (par défaut 0.5)
+pred_class <- as.factor(ifelse(probs >= 0.35, 1, 0))
+
+# Afficher la matrice de confusion
+
+confusionMatrix(pred_class,df_test$alerte)
+
+conf <- as.matrix(table(Predicted = pred_class, Actual = df_test$alerte))
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.2,    # prédiction = 0
+  0.2, 1      #prédiction = 1
+), nrow = 2, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+```
+
+RF reg binaire
+
+```{r}
+
+set.seed(23)
+rf.fit.simple= randomForest(Concentration.mg.L ~. - Concentration.mg.L - alerte , data=df_train )
+
+
+df_test$predict=predict(rf.fit.simple,df_test)
+df_test$alerte= as.factor(ifelse(df_test$Concentration.mg.L>200, 1,  0) )
+df_test$predict_alerte = as.factor(ifelse(df_test$predict>200, 1, 0) )
+df_test$erreur = df_test$predict-df_test$Concentration.mg.L
+df_test$abs_erreur = abs(df_test$erreur)
+df_erreur = df_test %>% filter(predict_alerte!=alerte)
+confusionMatrix(df_test$predict_alerte,df_test$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_test$predict_alerte, df_test$alerte)$table)
+
+
+# Matrice de pondération des erreurs (ligne = prédiction, colonne = vérité)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1, 0.2,   # prédiction = 0
+  0.2,  1      # prédiction = 2
+), nrow = 2, byrow = TRUE)
+
+# Total des prédictions pondérées correctement
+TP_w <- sum(conf * W)
+
+# Total des prédictions possibles (normalisation)
+Total_possible <- sum(conf)
+
+# F1 Gravité-Inversée (ou Recall pondéré)
+F1_GI <- TP_w / Total_possible
+
+cat("F1-GI (Score de précision pondéré selon la gravité des erreurs) :", round(F1_GI, 4), "\n")
+```
+
+RF reg ternaire
+
+```{r}
+set.seed(23)
+rf.fit.simple= randomForest(Concentration.mg.L ~. - Concentration.mg.L - alerte, data=df_train )
+
+
+df_test$predict=predict(rf.fit.simple,df_test)
+df_test$alerte= as.factor(ifelse(df_test$Concentration.mg.L>200,2,  ifelse(df_test$Concentration.mg.L>=180,1,0)  ) )
+df_test$predict_alerte = as.factor(ifelse(df_test$predict>200,2,  ifelse(df_test$predict>=180,1,0)  ) )
+df_test$erreur = df_test$predict-df_test$Concentration.mg.L
+df_test$abs_erreur = abs(df_test$erreur)
+df_erreur = df_test %>% filter(predict_alerte!=alerte)
+confusionMatrix(df_test$predict_alerte,df_test$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_test$predict_alerte, df_test$alerte)$table)
+
+
+# Matrice de pondération des erreurs (ligne = prédiction, colonne = vérité)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+# Total des prédictions pondérées
+TP_w <- sum(conf * W)
+
+# Total des prédictions possibles (normalisation)
+Total_possible <- sum(conf)
+
+# F1 Gravité-Inversée (ou Recall pondéré)
+F1_GI <- TP_w / Total_possible
+
+cat("F1-GI (Score de précision pondéré selon la gravité des erreurs) :", round(F1_GI, 4), "\n")
+
+
+mse <- mean((df_test$Concentration.mg.L - df_test$predict)^2)
+print(mse)
+```
+
+GLM
+
+```{r}
+set.seed(23)
+mod <- glm(Concentration.mg.L ~ ., 
+           data = subset(df_train, select = -c(alerte)), 
+           family = gaussian)
+plot(mod$fitted.values, resid(mod), xlab = "Valeurs ajustées", ylab = "Résidus")
+abline(h = 0, col = "red")
+summary(mod)
+
+
+
+
+df_test$predict <- predict(mod, newdata = subset(df_test, select = -c(alerte)))
+
+df_test$alerte= as.factor(ifelse(df_test$Concentration.mg.L>200,2,  ifelse(df_test$Concentration.mg.L>=180,1,0)  ) )
+df_test$predict_alerte = as.factor(ifelse(df_test$predict>200,2,  ifelse(df_test$predict>=180,1,0)  ) )
+confusionMatrix(df_test$predict_alerte,df_test$alerte) #Le RF et le glm ont des performances quasi égales lorsqu'on classifie post-hoc.Le RF capte des interractions complexes qui le rendent plus performant
+
+df_test$erreur = df_test$predict - df_test$Concentration.mg.L
+
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = erreur)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") + geom_hline(yintercept = 0, linetype = "dashed", color = "red") 
+
+
+
+conf <- as.matrix(confusionMatrix(df_test$predict_alerte, df_test$alerte)$table)
+
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+```
+
+NNET
+
+```{r}
+library(nnet)
+set.seed(23)
+
+#choix des var explicatives
+cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_9","cumul_glissant_St_martin_9","cumul_glissant_St_Et_89","cumul_glissant_Coursegoules_57")
+
+#pour standariser/déstandariser 
+means <- sapply(df_train[, cols], mean)
+sds <- sapply(df_train[, cols], sd)
+
+#on est obligé de standariser les vars explicatives pour que les neurones fonctionnent correctement
+X_train <- scale(df_train[, cols], center = means, scale = sds)
+
+
+X_test  <- scale(df_test[, cols], center = means, scale = sds)
+
+
+y_train <- df_train$Concentration.mg.L #pas besoin pour l'expliquée (pas d'effet d'échelle)
+
+#entraînement du modèle. size = nbr de neurones, maxit = nombre max d'itérations (On pourrait utiliser 250 plutôt que 300, la convergence est rapide), linout = si on veut une régression, decay = coefficient de perte de mémoire à chaque étape (éviter l'overfitting)
+
+nn <- nnet(X_train, y_train, size = 6, maxit = 400, linout = TRUE, decay=0.3)
+
+
+#Pour le clustering uniquement
+#dummies_train <- model.matrix(~ groupe - 1, data = df_train)
+#dummies_test  <- model.matrix(~ groupe - 1, data = df_test)
+
+#X_train <- cbind(X_train, dummies_train)
+#X_test  <- cbind(X_test,  dummies_test)
+
+#cols = c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_9","cumul_glissant_St_martin_9","cumul_glissant_St_Et_89","cumul_glissant_Coursegoules_57","groupe1","groupe2","groupe3","groupe4")
+
+
+
+
+
+df_test$pred_concentration_nnet <- predict(nn, newdata = X_test)
+df_test$erreur_nnet = df_test$pred_concentration_nnet - df_test$Concentration.mg.L
+df_test %>% ggplot(aes(x = Concentration.mg.L, y = erreur_nnet)) +geom_point(alpha = 0.4, color = "steelblue")+geom_smooth(method = "loess", se = FALSE, color = "black") + geom_hline(yintercept = 0, linetype = "dashed", color = "red") 
+
+
+
+summary(nn) #permet de regarder la convergence de l'algo et la tête qu'à chaque neurone
+
+
+#classification sur les valeurs estimées
+df_test$alerte= as.factor(ifelse(df_test$Concentration.mg.L>200,2,  ifelse(df_test$Concentration.mg.L>=180,1,0)  ) )
+df_test$predict_alerte_nnet = as.factor(ifelse(df_test$pred_concentration_nnet>200,2,  ifelse(df_test$pred_concentration_nnet>=180,1,0)  ) )
+df_test$erreur = df_test$pred_concentration_nnet-df_test$Concentration.mg.L
+df_erreur = df_test %>% filter(predict_alerte_nnet!=alerte)
+
+
+confusionMatrix(df_test$predict_alerte_nnet,df_test$alerte)
+
+
+conf <- as.matrix(confusionMatrix(df_test$predict_alerte_nnet, df_test$alerte)$table)
+
+#Matrice de pondération des erreurs (ligne = prédict, colonne = factuel)
+# 1 = erreur légère, 0 = erreur très grave
+W <- matrix(c(
+  1,   0.9, 0.2,   # prédiction = 0
+  0.7, 1,   0.4,   # prédiction = 1
+  0.2, 0.5, 1      # prédiction = 2
+), nrow = 3, byrow = TRUE)
+
+
+
+# F1 Gravité Inversée 
+TP_w <- sum(conf * W) #somme des prédictions * leur poids
+Total_possible <- sum(conf) #somme des prédictions
+F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
+
+cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
+
+
+mse <- mean((df_test$Concentration.mg.L - df_test$pred_concentration_nnet)^2)
+print(mse)
+```
+
+# Graphiques divers
+
+```{r}
+set.seed(124) #pour la reproductibilité
+
+rf_dataframe_ves <- data_S04_Ves_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(-c(
+                                               Levens,
+                                               Nice,
+                                               St_Et,
+                                               Ascros,
+                                               Carros,
+                                               Coursegoules,
+                                               Lantosque,Le_mas,Luceram,Peone,Puget,Rimplas,Saint_martin_dentraunes, St_martin,cumul_glissant_Ascros_54 , cumul_glissant_Carros_86, cumul_glissant_Le_mas_54 ,  cumul_glissant_Nice_87
+                       , cumul_glissant_St_Et_45 , cumul_glissant_Levens_86, cumul_glissant_Rimplas_55, cumul_glissant_St_martin_87
+                      , cumul_glissant_Saint_martin_dentraunes_43 )) %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L> 200, 1 , 0)))
+
+index_ech = sample(seq_len(nrow(rf_dataframe_ves)), size = 0.8 * nrow(rf_dataframe_ves))
+df_train = rf_dataframe_ves[index_ech, ]
+df_test = rf_dataframe_ves[-index_ech, ]
+```
+
+Cette case permet de réévaluer rapidement les modèles Nnet pour chaque base et faire les graphiques. Ne pas s'y référer pour obtenir des résultats.
+
+```{r}
+
+
+library(nnet)
+set.seed(23)
+
+
+
+#choix des var explicatives pour Raybaud
+cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_43","cumul_glissant_Puget_54","cumul_glissant_Lantosque_86","cumul_glissant_Luceram_55","cumul_glissant_Coursegoules_87")
+
+#choix des var explicatives pour Vésubie
+cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_43","cumul_glissant_Puget_54","cumul_glissant_Lantosque_86","cumul_glissant_Luceram_55","cumul_glissant_Coursegoules_87")
+
+#pour standariser/déstandariser 
+means <- sapply(df_train[, cols], mean)
+sds <- sapply(df_train[, cols], sd)
+
+#on est obligé de standariser les vars explicatives pour que les neurones fonctionnent correctement
+
+
+X_train <- scale(df_train[, cols], center = means, scale = sds)
+X_test  <- scale(df_test[, cols], center = means, scale = sds)
+y_train <- df_train$Concentration.mg.L #pas besoin pour l'expliquée (pas d'effet d'échelle)
+
+#entraînement du modèle. size = nbr de neurones, maxit = nombre max d'itérations (On pourrait utiliser 250 plutôt que 300, la convergence est rapide), linout = si on veut une régression, decay = coefficient de perte de mémoire à chaque étape (éviter l'overfitting)
+nn <- nnet(X_train, y_train, size = 7, maxit = 400, linout = TRUE, decay=0.65)
+
+df_train$predict = nn$fitted.values
+df_test$predict = predict(nn,X_test)
+
+mse <- mean((df_test$Concentration.mg.L - df_test$predict)^2)
+mse
+```
+
+```{r}
+
+ggplot() +
+  # Ligne pour data_S04_Ves_meteo
+  geom_line(data = data_S04_Ves_meteo, aes(x = jour, y = Concentration.mg.L), color = "steelblue", size = 1) +
+  
+  # Points pour df_test
+  geom_point(data = df_plot, aes(x = jour, y = predict), color = "darkorange", size = 2) +
+  geom_point(data = df_plot, aes(x = jour, y = pred_concentration_nnet), color = "green", size = 2) +
+  labs(title = "Valeurs prédites projetées sur les valeurs réelles en fonction du temps",
+       x = "Date",
+       y = "Valeur prédite") +
+  theme_minimal()
+
+
+
+
+
+
+```
+
+Les prédictions ont une bonne tête, peut-être est-il possible de prolonger la courbe ? ==\> Prédire la concentration à l'air tout à fait possible
+
+```{r}
+
+df_test = df_test %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L>200,2,  ifelse(Concentration.mg.L>=180,1,0)  ) ), predict_alerte_nnet = as.factor(ifelse(predict>200,2,  ifelse(predict>=180,1,0)  ) ))
+confusionMatrix(df_test$predict_alerte_nnet,df_test$alerte)
+```
+
+Graph avec seuil de conductivité (520). Le seuil est empirique, graphiquement on remarque que toutes les observations avec + de 200 mg/L ont une conductivité supérieure à 520 µS/cm.
+
+```{r}
+data_S04_Ves_meteo = data_S04_Ves_meteo %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L>200,2,ifelse(Concentration.mg.L>=180,1,0) ) ) )
+ 
+
+seuil_alerte_2 <- data_S04_Ves_meteo %>%
+  filter(alerte == 2) %>%
+  summarise(min_val = min(`Conductivité.µS.cm`, na.rm = TRUE)) %>%
+  pull(min_val)
+
+# Graphique avec ligne horizontale
+ggplot(data = data_S04_Ves_meteo, aes(x = jour, y = `Conductivité.µS.cm`, fill = alerte)) +
+  geom_point(shape = 21, color = "black", size = 3) +
+  scale_fill_manual(values = c("0" = "green", "1" = "orange", "2" = "red")) +
+  geom_hline(yintercept = seuil_alerte_2, linetype = "dashed", color = "red") +
+  labs(fill = "Alerte",
+       title = "Conductivité en fonction de la date",
+       y = "Conductivité (µS/cm)")
+```
