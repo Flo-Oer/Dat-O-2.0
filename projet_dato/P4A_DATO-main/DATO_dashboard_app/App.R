@@ -1,6 +1,6 @@
 # Script principal: Définition de l'architecture et logique du dashboard
 options(download.file.method = "wininet")
-setwd("S:/DPH/07 - DATASCIENCE/2-visualisation_valorisation_donnees/Qualite/projet_dato/P4A_DATO-main/DATO_dashboard_app")
+# setwd("S:/DPH/07 - DATASCIENCE/2-visualisation_valorisation_donnees/Qualite/projet_dato/P4A_DATO-main/DATO_dashboard_app")
 # Installation des packages nécessaire au fonctionnement du dashboard 
 
 if (!require('shiny')) install.packages('shiny')
@@ -36,6 +36,8 @@ library(htmltools)
 library(ggplot2)
 library(plotly)
 library(shinyalert)
+
+
 
 # Appel des scripts R, pour definir les graphiques
 
@@ -410,7 +412,40 @@ ui <- fluidPage(
                             
                             ) # Fin de sidebarLayout
                           
-                          ) # Fin de tab KAPTA/PSV
+                          ), # Fin de tab KAPTA/PSV
+                          
+                          
+                          # --------Venuja-----------
+                          tabPanel(
+                            "Statistiques Chlore",
+                            
+                            fluidPage(
+                              h3("Monitoring Qualité de l'Eau"),
+                              p("Gestion des sondes Kapta et PSV"),
+                              
+                              # ---- Parameters ----
+                              fluidRow(
+                                column(3, numericInput("chlore_threshold", "Seuil de chlore (mg/L):", value = 0.3, min = 0, step = 0.01)),
+                                column(3, dateInput("date_start", "Date début")),
+                                column(3, dateInput("date_end", "Date fin")),
+                                column(3, selectInput("threshold_filter", "Afficher :", 
+                                                      choices = c("Tous les résultats", 
+                                                                  "Seulement au-dessus du seuil", 
+                                                                  "Seulement en dessous du seuil")))
+                              ),
+                              
+                              # ---- Map section ----
+                              h4("Localisation des dépassements de seuil"),
+                              leafletOutput("chlore_map", height = 400),
+                              
+                              br(),
+                              h4("Top 5 des points avec le plus de dépassements"),
+                              uiOutput("top5_charts")
+                            )
+                          )
+
+
+
                  )
                ),
              )
@@ -604,9 +639,163 @@ ui <- fluidPage(
       "Pas de données pour ces paramètres"
     }
     )
+  }
+    server <- function(input, output, session) {
+  
+  # Venuja
+  # ---- Load or reference your chlorine dataset ----
+  # Example: data <- read.csv("Donnees/Donnees_Dato/chlore_data.csv")
+ 
+    reactive_data <- reactive({
+    df <- psv_data  # use the actual dataset
+    
+    # Filter for chlorine data
+    df <- df %>% 
+      filter(Unite %in% c("mg(Cl2)/L (165)"))
+    
+    # Filter by date range
+    if (!is.null(input$date_start) && !is.null(input$date_end)) {
+      df <- df[df$Date.de.prelevement >= input$date_start & df$Date.de.prelevement <= input$date_end, ]
+    }
+    
+    # Calculate threshold status
+    df$above <- df$Resultat > input$chlore_threshold
+    
+    # Filter depending on user’s selection
+    if (input$threshold_filter == "Seulement au-dessus du seuil") {
+      df <- df[df$above == TRUE, ]
+    } else if (input$threshold_filter == "Seulement en dessous du seuil") {
+      df <- df[df$above == FALSE, ]
+    }
+    
+    df
+  })
+
+  output$top5_charts <- renderUI({
+    df <- reactive_data()
+    if (is.null(df) || nrow(df) == 0) return(h4("Aucune donnée disponible pour ces filtres."))
+
+    # Top 5 sensors with most threshold exceedances
+    top_sensors <- df %>%
+      group_by(Numero) %>%
+      summarise(depassements = sum(Resultat > input$chlore_threshold)) %>%
+      arrange(desc(depassements)) %>%
+      head(5)
+
+    plot_list <- lapply(1:nrow(top_sensors), function(i) {
+      sensor_name <- top_sensors$Numero[i]
+      plotlyOutput(paste0("plot_", i))
+    })
+
+    do.call(tagList, plot_list)
+  })
+
+    # ---- Localisation des dépassements de seuil ----
+  output$chlore_map <- renderLeaflet({
+    df <- reactive_data()
+    if (is.null(df) || nrow(df) == 0) return(NULL)
+    
+    # Compute exceedances
+    df_summary <- df %>%
+      group_by(Numero) %>%
+      summarise(depassements = sum(Resultat > input$chlore_threshold),
+                moyenne = mean(Resultat, na.rm = TRUE)) %>%
+      filter(!is.na(Numero))
+    
+    # Safely merge with position_PSV (for coordinates)
+    if (exists("position_PSV")) {
+      df_summary <- df_summary %>%
+        left_join(position_PSV %>% 
+                    st_drop_geometry() %>%
+                    select(Numero, XWGS84, YWGS84),
+                  by = "Numero")
+    } else {
+      return(h4("Erreur : Les coordonnées des sondes (position_PSV) ne sont pas disponibles."))
+    }
+    
+    # Remove rows without coordinates
+    df_summary <- df_summary %>% filter(!is.na(XWGS84), !is.na(YWGS84))
+    
+    if (nrow(df_summary) == 0)
+      return(h4("Aucune position disponible pour les sondes sélectionnées."))
+
+    # Define color categories for exceedances
+    df_summary$color <- cut(df_summary$depassements,
+                            breaks = c(-Inf, 5, 10, 20, Inf),
+                            labels = c("green", "yellow", "orange", "red"))
+    
+    # Build leaflet map
+    leaflet(df_summary) %>%
+      addTiles() %>%
+      addCircleMarkers(~XWGS84, ~YWGS84,
+                      color = ~as.character(color),
+                      label = ~paste0("Sonde ", Numero, ": ", depassements, " dépassements"),
+                      radius = 8, fillOpacity = 0.8) %>%
+      addLegend("bottomright",
+                colors = c("green", "yellow", "orange", "red"),
+                labels = c("≤ 5", "6–10", "11–20", "> 20"),
+                title = "Dépassements")
+  })
+
+
+
+
+
+
+  observe({
+    df <- reactive_data()
+    if (is.null(df) || nrow(df) == 0) return(NULL)
+
+    top_sensors <- df %>%
+      group_by(Numero) %>%
+      summarise(depassements = sum(Resultat > input$chlore_threshold)) %>%
+      arrange(desc(depassements)) %>%
+      head(5)
+
+    for (i in 1:nrow(top_sensors)) {
+      local({
+        my_i <- i
+        sensor_name <- top_sensors$Numero[my_i]
+        
+       output[[paste0("plot_", my_i)]] <- renderPlotly({
+          df_sensor <- df[df$Numero == sensor_name, ]
+          if (nrow(df_sensor) == 0) return(NULL)
+
+          p <- ggplot(df_sensor, aes(
+              x = Date.de.prelevement,
+              y = Resultat,
+              group = 1,   # ensures all points connect as one line
+              text = paste0(
+                "<b>Date :</b> ", format(Date.de.prelevement, "%d/%m/%Y"),
+                "<br><b>Chlore (mg/L) :</b> ", round(Resultat, 3),
+                "<br><b>Seuil :</b> ", input$chlore_threshold
+              )
+            )) +
+              geom_line(color = "#007bff", size = 0.8, na.rm = TRUE) +
+              geom_point(color = "#007bff", size = 2, na.rm = TRUE) +
+              geom_hline(yintercept = input$chlore_threshold, color = "red", linetype = "dashed") +
+              labs(
+                title = paste("Sonde", sensor_name),
+                y = "Chlore (mg/L)",
+                x = "Date"
+              ) +
+              theme_minimal() +
+              theme(plot.title = element_text(face = "bold"))
+
+            ggplotly(p, tooltip = "text") %>%
+              layout(hoverlabel = list(bgcolor = "white", font = list(color = "black")))
+        })
+
+      })
+    }
+  })
+
+
+
  
   } # Fin de serveur logique
   
   # Run the app
   shinyApp(ui, server)
   # runApp(list(ui=ui, server=server), host="10.165.8.60", port=5050)
+  
