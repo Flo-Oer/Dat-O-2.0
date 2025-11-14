@@ -9,8 +9,21 @@ cd_bar2 <- st_transform(cd_bar2, CRS("+init=epsg:4326"))
 
 
 # Read the Excel file with point coordinates
-
+# ---- Load Kapta sondes coordinates safely ----
 position_sondes <<- read_excel("./Donnees/Dato donnees clean/position-sondes-global.xlsx")
+
+# Ensure consistent column naming (accepts either XWGS84/YWGS84 or Longitude/Latitude)
+if (!("Longitude" %in% names(position_sondes)) && "XWGS84" %in% names(position_sondes)) {
+  position_sondes <- position_sondes %>% rename(Longitude = XWGS84)
+}
+if (!("Latitude" %in% names(position_sondes)) && "YWGS84" %in% names(position_sondes)) {
+  position_sondes <- position_sondes %>% rename(Latitude = YWGS84)
+}
+
+# Confirm coordinates are numeric
+position_sondes$Longitude <- as.numeric(position_sondes$Longitude)
+position_sondes$Latitude  <- as.numeric(position_sondes$Latitude)
+
 
 # Read the Excel file with point data
 psv_data <<- read_excel("./Donnees/Dato donnees clean/donnees_PSV.xlsx")
