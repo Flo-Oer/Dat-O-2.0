@@ -41,12 +41,12 @@ library(shinyalert)
 
 # Appel des scripts R, pour definir les graphiques
 
-source("./Script/Carto_2.R")        # Carte leaflet
-source("./Script/Graphes.R")        # Graphiques de répartition
-source("./Script/Kapta-PSV.R")      # Graphiques généraux KAPTA / PSV
-source("./Script/Seuil_chlore.R")   # Graphiques et tableau etude de seuil
-source("./Script/Meteo.R")          # Graphique pluviométrique
-source("./Script/Seuil_chlore2.R")
+source("./scripts/Carto_2.R")        # Carte leaflet
+source("./scripts/Graphes.R")        # Graphiques de répartition
+source("./scripts/Kapta-PSV.R")      # Graphiques généraux KAPTA / PSV
+source("./scripts/Seuil_chlore.R")   # Graphiques et tableau etude de seuil
+source("./scripts/Meteo.R")          # Graphique pluviométrique
+source("./scripts/Seuil_chlore2.R")
 
 donnees_psv <- psv_data
 
@@ -715,7 +715,7 @@ ui <- fluidPage(
   
   # Venuja
   # ---- Load or reference your chlorine dataset ----
-  # Example: data <- read.csv("Donnees/Donnees_Dato/chlore_data.csv")
+  # Example: data <- read.csv("data/raw/chlore_data.csv")
  
     reactive_data <- reactive({
     df <- psv_data  # use the actual dataset

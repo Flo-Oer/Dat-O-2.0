@@ -1,16 +1,16 @@
 
 
-donnees_sondes <<- read_excel("./Donnees/Dato donnees clean/MasterKaptaV2.xlsx", range = cell_cols("C:P"))
+donnees_sondes <<- read_excel("./data/clean/MasterKaptaV2.xlsx", range = cell_cols("C:P"))
 
 # Read the shapefile with polylines
-cd_bar <- st_read("./Donnees/Donnees_Dato/wMain_202205_Nice_secteurs/wMain_202205_Nice_secteurs.shp")
+cd_bar <- st_read("./data/raw/wMain_202205_Nice_secteurs/wMain_202205_Nice_secteurs.shp")
 cd_bar2 <- st_zm(cd_bar)
 cd_bar2 <- st_transform(cd_bar2, CRS("+init=epsg:4326"))
 
 
 # Read the Excel file with point coordinates
 # ---- Load Kapta sondes coordinates safely ----
-position_sondes <<- read_excel("./Donnees/Dato donnees clean/position-sondes-global.xlsx")
+position_sondes <<- read_excel("./data/clean/position-sondes-global.xlsx")
 
 # Ensure consistent column naming (accepts either XWGS84/YWGS84 or Longitude/Latitude)
 if (!("Longitude" %in% names(position_sondes)) && "XWGS84" %in% names(position_sondes)) {
@@ -26,11 +26,11 @@ position_sondes$Latitude  <- as.numeric(position_sondes$Latitude)
 
 
 # Read the Excel file with point data
-psv_data <<- read_excel("./Donnees/Dato donnees clean/donnees_PSV.xlsx")
+psv_data <<- read_excel("./data/clean/donnees_PSV.xlsx")
 
 
 # Read the shapefile with position_PSV and Transform the spatial coordinates to EPSG 4326 to extract X and Y coordinates
-position_PSV <- st_read("./Donnees/Donnees_Dato/Loc_PSV_V4/Loc_PSV_V4.shp")
+position_PSV <- st_read("./data/raw/Loc_PSV_V4/Loc_PSV_V4.shp")
 position_PSV <- st_transform(position_PSV, CRS("+init=epsg:4326"))
 coords <- st_coordinates(position_PSV)
 position_PSV$XWGS84 <- coords[,1]

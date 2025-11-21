@@ -1,7 +1,7 @@
 
 
 # Charge les données CSV
-donnees <- read_excel("./Donnees/Dato donnees clean/MasterMeteo.xlsx")
+donnees <- read_excel("./data/clean/MasterMeteo.xlsx")
 
 # Convertir les colonnes "Date" et "Heure" en format Date et POSIXct
 donnees$Date <- as.Date(donnees$Date, format = "%d/%m/%Y")

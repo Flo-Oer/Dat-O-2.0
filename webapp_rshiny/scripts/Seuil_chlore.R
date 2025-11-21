@@ -1,6 +1,6 @@
 
 
-source("./Script/Kapta-PSV.R")
+source("./scripts/Kapta-PSV.R")
 
 df1 <- donnees_sondes # Données KAPTA
 df2 <- position_sondes # Position Kapta

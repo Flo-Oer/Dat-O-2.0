@@ -1,5 +1,5 @@
 
-source("./Script/Carto_2.R")
+source("./scripts/Carto_2.R")
 
 
 PSV_pivoted <- pivot_wider(psv_data, names_from = Parametre, values_from = Resultat)

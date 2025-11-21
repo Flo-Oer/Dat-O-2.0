@@ -1,9 +1,9 @@
 # Chargement des données depuis le fichier xlsx
-# donnees <- read_excel("../Donnees/Dato donnees clean/donnees_PSV.xlsx", col_types = c(Mois = "text"))
+# donnees <- read_excel("../data/clean/donnees_PSV.xlsx", col_types = c(Mois = "text"))
 df3 <- psv_data
 
 df3$Mois <- as.character(df3$Mois) # Modifier les données de la colonne Mois en chaîne de caractères
-contexte <- read_excel("./Donnees/Dato donnees clean/contextePSV_ajour.xlsx")
+contexte <- read_excel("./data/clean/contextePSV_ajour.xlsx")
 # Fusionner les données du fichier "contextePSV_ajour.xlsx" avec les données du tableau principal en utilisant la colonne "Numero" comme clé de fusion
 donnees_avec_secteur <- merge(df3, contexte[, c("Numero", "Sectorisation")], by = "Numero", all.x = TRUE)
 
