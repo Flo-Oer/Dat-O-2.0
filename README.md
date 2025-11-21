@@ -1,5 +1,10 @@
 # Dat-O-2.0
-semester project
+Projet de semestre : 
+- permettre l'integration d'une webapp rshiny dans le systeme rshiny existant de dato
+- revoir la structure UI/UX de la webapp cree precedemment
+- integrer un script ML a cette webapp
+
+![webapp screenshot](./webapp_rshiny/webapp_screenshot.png)
 
 ## prediction_sulfate
 
