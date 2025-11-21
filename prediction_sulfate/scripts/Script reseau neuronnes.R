@@ -19,7 +19,7 @@ library(ROSE)
 library("nnet")
 library(Factoshiny)
 
-chemin = "S:/DPH/07 - DATASCIENCE/6-Process_qualite/Scripts + rapport Clément Barcaroli/Concentration Sulfate/"
+chemin = "input"
 
 #Au départ, il faut deux dataframes : 
 #un premier qui contient la colonne Conductivité.mg.L sans décimale, la colonne Concentration.mg.L sans décimale, la colonne temperature avec deux décimales et la colonne jour qui contient la date au format aaaa-mm-jj
@@ -45,7 +45,7 @@ importer_donnees_sulfates = function(chemin_fichier){
 
 data_S04_Ves = importer_donnees_sulfates(paste0(chemin,"Données sulfates et conductivités Vésubie.xlsx"))
 
-temperature_ves = read.xlsx("d:/users/rea0956/Desktop/Données de travail/Sulfates/Données températures in situ Vesubie et Raybaud.xlsx",sheet = 1,colNames=TRUE,detectDates = TRUE,startRow = 2)
+temperature_ves = read.xlsx("Données températures in situ Vesubie et Raybaud.xlsx",sheet = 1,colNames=TRUE,detectDates = TRUE,startRow = 2)
 temperature_ves = temperature_ves %>% dplyr::select(Date.de.prélèvement,Résultat) %>% group_by(Date.de.prélèvement) %>%  summarise(temperature = round(mean(Résultat, na.rm = TRUE),digits=2), .groups = "drop")
 
 
@@ -53,50 +53,50 @@ data_S04_Ves = data_S04_Ves %>% rename('jour'='Date de prélèvement')
 temperature_ves = temperature_ves %>% rename('jour'= Date.de.prélèvement)
 data_S04_Ves = merge(data_S04_Ves,temperature_ves, by="jour")
 
-load(paste0(chemin,'Météo/meteofr_HorQuot.RData'))
+load(paste0(chemin,'meteofr_HorQuot.RData'))
 meteo_ante_2023 = meteo_horquot
-load(paste0(chemin,'Météo/meteoFrAPI_06075007.RData'))
+load(paste0(chemin,'meteoFrAPI_06075007.RData'))
 meteo_Levens = meteo_horquot #Levens
-load(paste0(chemin,'Météo/meteoFrAPI_06088001.RData'))
+load(paste0(chemin,'meteoFrAPI_06088001.RData'))
 meteo_Nice = meteo_horquot #Nice
-load(paste0(chemin,'Météo/meteoFrAPI_06103002.RData'))
+load(paste0(chemin,'meteoFrAPI_06103002.RData'))
 meteo_Berthemont = meteo_horquot #BERTHEMONT-LES-BAINS_SAPC
-load(paste0(chemin,'Météo/meteoFrAPI_06120004.RData'))
+load(paste0(chemin,'meteoFrAPI_06120004.RData'))
 meteo_St_Et = meteo_horquot #Saint-Et
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06005001.RData'))
+load(paste0(chemin,'meteoFrAPI_06005001.RData'))
 meteo_Ascros = meteo_horquot
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06033002.RData'))
+load(paste0(chemin,'meteoFrAPI_06033002.RData'))
 meteo_Carros = meteo_horquot        
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06050002.RData'))
+load(paste0(chemin,'meteoFrAPI_06050002.RData'))
 meteo_Coursegoules = meteo_horquot 
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06074005.RData'))
+load(paste0(chemin,'meteoFrAPI_06074005.RData'))
 meteo_Lantosque = meteo_horquot 
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06077006.RData'))
+load(paste0(chemin,'meteoFrAPI_06077006.RData'))
 meteo_Luceram = meteo_horquot 
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06081001.RData'))
+load(paste0(chemin,'meteoFrAPI_06081001.RData'))
 meteo_Le_mas = meteo_horquot
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06094002.RData'))
+load(paste0(chemin,'meteoFrAPI_06094002.RData'))
 meteo_Peone = meteo_horquot
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06099004.RData'))
+load(paste0(chemin,'meteoFrAPI_06099004.RData'))
 meteo_Puget = meteo_horquot
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06102001.RData'))
+load(paste0(chemin,'meteoFrAPI_06102001.RData'))
 meteo_Rimplas = meteo_horquot
 
 
-load(paste0(chemin,'Météo/Tests Agathe/meteoFrAPI_06125001.RData'))
+load(paste0(chemin,'meteoFrAPI_06125001.RData'))
 meteo_Saint_martin_dentraunes = meteo_horquot
 meteo_Saint_martin_dentraunes= meteo_Saint_martin_dentraunes %>% filter((date != "2022-12-31" | rr1 != 0.0) & (date != "2020-12-31" | rr1 != 0.0)) #doublons pour 2022 12 31 et 2020 12 31
 
-meteo_St_martin = read.csv(paste0(chemin,'Météo/CSV St Martin/meteo_St_martin.csv')) #J'ai créé ce csv à partir du script St Martin présent dans le dossier
+meteo_St_martin = read.csv(paste0(chemin,'../output/meteo_St_martin.csv')) #J'ai créé ce csv à partir du script St Martin présent dans le dossier
 meteo_St_martin$jour=as.Date(meteo_St_martin$jour)
 meteo_St_martin$St_martin=round(meteo_St_martin$St_martin,2)
 rm(meteo_horquot)
