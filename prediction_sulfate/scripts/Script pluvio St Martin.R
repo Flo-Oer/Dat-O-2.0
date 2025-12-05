@@ -44,7 +44,7 @@ meteo_st_martin <- meteo_st_martin %>%
                        St_martin)
   ) %>%
   ungroup() %>%
-  select(-jour_mois)  # Nettoyage
+  dplyr::select(-jour_mois)  # Nettoyage
 
 write.csv(meteo_st_martin, "../prediction_sulfate/output/meteo_st_martin.csv", row.names = FALSE)
 getwd() 
