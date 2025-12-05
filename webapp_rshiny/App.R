@@ -427,46 +427,48 @@ ui <- fluidPage(
                                 h4("Sélection des sondes et période", style = "color:#337ab7;"),
                                 fluidRow(
                                   column(4, dateInput("date_start_global", "Date début", value = "2019-01-01",
-                                        min = "2019-01-01", max = "2021-06-16")),
+                                                      min = "2019-01-01", max = "2021-06-16")),
                                   column(4, dateInput("date_end_global", "Date fin", value = "2021-06-16",
-                                        min = "2019-01-01", max = "2021-06-16")),
+                                                      min = "2019-01-01", max = "2021-06-16")),
                                   column(4, h5(textOutput("selected_sondes_count"), style = "margin-top:35px;"))
                                 )
                               ),
 
-
                               # --- Section: Sélection des variables à afficher ---
-                            wellPanel(
-                              h4("Variables à afficher", style = "color:#337ab7;"),
-                              conditionalPanel(
-                                condition = "true",  # always visible for now
-                                checkboxGroupInput(
-                                  "variables_kapta",
-                                  "Kapta sondes :",
-                                  choices = c(
-                                    "Chlore 1 (mg/L)" = "chlore1",
-                                    "Chlore 2 (mg/L)" = "chlore2",
-                                    "Pression (Bar) × 0.1" = "pression",
-                                    "Température (°C) / 100" = "temperature"
-                                  ),
-                                  selected = c("chlore1", "chlore2", "pression", "temperature")
-                                ),
-                                checkboxGroupInput(
-                                  "variables_psv",
-                                  "PSV sondes :",
-                                  choices = c(
-                                    "Conductivité (µS/cm)" = "conductivite",
-                                    "COT (mg/L)" = "cot"
-                                  ),
-                                  selected = c("conductivite")
-                                )
-                              )
-                            ),
-
-
-                              # --- Section: Carte ---
                               wellPanel(
-                                h4("Localisation des sondes", style = "color:#337ab7;"),
+                                h4("Variables à afficher", style = "color:#337ab7;"),
+                                conditionalPanel(
+                                  condition = "true",
+                                  checkboxGroupInput(
+                                    "variables_kapta",
+                                    "Kapta sondes :",
+                                    choices = c(
+                                      "Chlore 1 (mg/L)" = "chlore1",
+                                      "Chlore 2 (mg/L)" = "chlore2",
+                                      "Température (°C)" = "temperature"
+                                    ),
+                                    selected = c("chlore1", "chlore2", "temperature")
+                                  ),
+                                  checkboxGroupInput(
+                                    "variables_psv",
+                                    "PSV sondes :",
+                                    choices = c(
+                                      "Conductivité (µS/cm)" = "conductivite",
+                                      "COT (mg/L)" = "cot"
+                                    ),
+                                    selected = c("conductivite")
+                                  )
+                                )
+                              ),
+
+                              # --- Section: Sélection par menu déroulant + carte ---
+                              wellPanel(
+                                h4("Localisation et sélection des sondes", style = "color:#337ab7;"),
+                                fluidRow(
+                                  column(6,
+                                        selectInput("sensor_selector", "Sélectionnez une sonde :", choices = NULL, multiple = TRUE)
+                                  )
+                                ),
                                 leafletOutput("global_map", height = 400),
                                 tags$div(
                                   style = "text-align:center; margin-top:10px;",
@@ -476,15 +478,12 @@ ui <- fluidPage(
 
                               # --- Section: Graphiques ---
                               wellPanel(
-                                h5("Sélectionnez jusqu'à 4 sondes sur la carte pour afficher les graphiques",
+                                h5("Sélectionnez jusqu'à 4 sondes (carte ou menu) pour afficher les graphiques",
                                   style = "text-align:center; margin-bottom:20px;"),
                                 uiOutput("global_graphs")
                               )
                             )
                           ),
-
-
-
 
                           # --------Venuja-----------
                           tabPanel(
@@ -865,236 +864,215 @@ ui <- fluidPage(
 
   # ---- visualization global  ----
   # ---- Reactive selection of sondes ----
-  selected_sondes <- reactiveVal(character(0))
+selected_sondes <- reactiveVal(character(0))
 
-  # ---- Map rendering ----
-  output$global_map <- renderLeaflet({
-    # --- PSV sondes ---
-    if (exists("position_PSV")) {
-      psv_points <- tryCatch({
+# ---- Populate dropdown menu dynamically ----
+observe({
+  if (exists("position_PSV") || exists("position_sondes")) {
+    sondes_all <- bind_rows(
+      if (exists("position_PSV")) {
         position_PSV %>%
           st_drop_geometry() %>%
-          mutate(
-            Type = "PSV",
-            ID = as.character(Numero),
-            Lon = if ("XWGS84" %in% names(.)) XWGS84 else if ("Longitude" %in% names(.)) Longitude else NA,
-            Lat = if ("YWGS84" %in% names(.)) YWGS84 else if ("Latitude" %in% names(.)) Latitude else NA
-          )
-      }, error = function(e) NULL)
-    } else psv_points <- NULL
-
-    # --- Kapta sondes ---
-    if (exists("position_sondes")) {
-      kapta_points <- tryCatch({
+          mutate(Type = "PSV", ID = paste0("P_", Numero)) %>%
+          select(Type, ID, Nom = Numero)
+      } else NULL,
+      if (exists("position_sondes")) {
         position_sondes %>%
-          mutate(
-            Type = "Kapta",
-            ID = as.character(ENDPOINTREF),
-            Lon = if ("Longitude" %in% names(.)) Longitude else if ("XWGS84" %in% names(.)) XWGS84 else NA,
-            Lat = if ("Latitude" %in% names(.)) Latitude else if ("YWGS84" %in% names(.)) YWGS84 else NA
-          )
-      }, error = function(e) NULL)
-    } else kapta_points <- NULL
+          mutate(Type = "Kapta", ID = paste0("K_", ENDPOINTREF)) %>%
+          select(Type, ID, Nom = ENDPOINTREF)
+      } else NULL
+    ) %>% filter(!is.na(ID))
 
-    # --- Combine ---
-    sondes_all <- bind_rows(psv_points, kapta_points)
-    sondes_all <- sondes_all %>% filter(!is.na(Lon), !is.na(Lat))
+    updateSelectInput(session, "sensor_selector",
+                      choices = setNames(sondes_all$ID, paste(sondes_all$Type, sondes_all$Nom)))
+  }
+})
 
-    if (nrow(sondes_all) == 0)
-      return(leaflet() %>% addTiles() %>% addPopups(7.25, 43.7, "Aucune sonde à afficher."))
+# ---- Handle dropdown selection ----
+observeEvent(input$sensor_selector, {
+  selected_sondes(unique(input$sensor_selector))
+})
 
-    leaflet(sondes_all) %>%
-      addTiles() %>%
-      addCircleMarkers(
-        lng = ~Lon, lat = ~Lat,
-        color = ~ifelse(Type == "Kapta", "#007bff", "#00b894"),
-        label = ~paste0("Sonde ", Type, " ", ID),
-        layerId = ~paste0(Type, "_", ID),
-        radius = 7, fillOpacity = 0.8
-      ) %>%
-      addLegend("bottomright",
-                colors = c("#007bff", "#00b894"),
-                labels = c("Kapta", "PSV"),
-                title = "Type de sonde")
+# ---- Map rendering ----
+output$global_map <- renderLeaflet({
+  psv_points <- if (exists("position_PSV")) {
+    position_PSV %>%
+      st_drop_geometry() %>%
+      mutate(Type = "PSV", ID = paste0("P_", Numero),
+             Lon = coalesce(XWGS84, Longitude),
+             Lat = coalesce(YWGS84, Latitude))
+  } else NULL
+
+  kapta_points <- if (exists("position_sondes")) {
+    position_sondes %>%
+      mutate(Type = "Kapta", ID = paste0("K_", ENDPOINTREF),
+             Lon = coalesce(XWGS84, Longitude),
+             Lat = coalesce(YWGS84, Latitude))
+  } else NULL
+
+  sondes_all <- bind_rows(psv_points, kapta_points) %>% filter(!is.na(Lon), !is.na(Lat))
+
+  leaflet(sondes_all) %>%
+    addTiles() %>%
+    addCircleMarkers(
+      lng = ~Lon, lat = ~Lat,
+      color = ~ifelse(Type == "Kapta", "#007bff", "#00b894"),
+      label = ~paste0("Sonde ", Type, " ", ID),
+      layerId = ~ID,
+      radius = 7, fillOpacity = 0.8
+    ) %>%
+    addLegend("bottomright",
+              colors = c("#007bff", "#00b894"),
+              labels = c("Kapta", "PSV"),
+              title = "Type de sonde")
+})
+
+# ---- Highlight selected sondes on map ----
+observe({
+  req(input$global_map_marker_click)
+  click <- input$global_map_marker_click
+  id <- click$id
+  current <- selected_sondes()
+
+  if (id %in% current) {
+    current <- setdiff(current, id)
+  } else {
+    if (length(current) >= 4) current <- c(tail(current, 3), id) else current <- c(current, id)
+  }
+
+  selected_sondes(current)
+
+  leafletProxy("global_map") %>%
+    clearMarkers() %>%
+    addCircleMarkers(
+      data = bind_rows(position_PSV, position_sondes),
+      lng = ~coalesce(XWGS84, Longitude),
+      lat = ~coalesce(YWGS84, Latitude),
+      color = ~ifelse(ID %in% current, "orange", ifelse(Type == "Kapta", "#007bff", "#00b894")),
+      radius = ~ifelse(ID %in% current, 10, 6),
+      fillOpacity = 0.9,
+      label = ~paste0("Sonde ", Type, " ", ID),
+      layerId = ~ID
+    )
+})
+
+# ---- Display count ----
+output$selected_sondes_count <- renderText({
+  paste0(length(selected_sondes()), " / 4 sondes sélectionnées")
+})
+
+# ---- UI for selected sondes ----
+output$global_graphs <- renderUI({
+  sondes <- selected_sondes()
+  if (length(sondes) == 0)
+    return(h5("Sélectionnez jusqu'à 4 sondes pour afficher les graphiques.",
+              style = "text-align:center;"))
+
+  plots <- lapply(sondes, function(id) {
+    plotlyOutput(paste0("plot_global_", id), height = 300)
   })
+  do.call(tagList, plots)
+})
 
- 
+# ---- Render plots ----
+observe({
+  sondes <- selected_sondes()
+  if (length(sondes) == 0) return()
 
-  # ---- Click logic (select up to 4 sondes) ----
-  observeEvent(input$global_map_marker_click, {
-    click <- input$global_map_marker_click
-    id <- click$id
-    current <- selected_sondes()
+  for (id in sondes) {
+    local({
+      my_id <- id
+      output[[paste0("plot_global_", my_id)]] <- renderPlotly({
+        type <- substr(my_id, 1, 1)
+        num <- as.numeric(gsub("^[A-Za-z_]+", "", my_id))
 
-    if (id %in% current) {
-      # Unselect if clicked again
-      current <- setdiff(current, id)
-    } else {
-      # If 4 already selected, drop the oldest and add new one
-      if (length(current) >= 4) {
-        current <- c(tail(current, 3), id)
-      } else {
-        current <- c(current, id)
-      }
-    }
+        # ===================== KAPTA =====================
+        if (type == "K") {
+          df <- donnees_sondes %>%
+            filter(ENDPOINTREF == as.numeric(num)) %>%
+            filter(DATEREF >= as.POSIXct(input$date_start_global),
+                   DATEREF <= as.POSIXct(input$date_end_global))
 
-    selected_sondes(current)
-  })
+          if (nrow(df) == 0)
+            return(plotly_empty(type = "scatter") %>%
+                     layout(title = paste("Sonde", my_id, "- aucune donnée")))
 
-  # ---- Display count ----
-  output$selected_sondes_count <- renderText({
-    paste0(length(selected_sondes()), " / 4 sondes sélectionnées")
-  })
+          # --- Chlore + Température with secondary axis ---
+          p <- ggplot(df, aes(x = DATEREF))
 
-  # ---- UI for selected sondes ----
-  output$global_graphs <- renderUI({
-    sondes <- selected_sondes()
-    if (length(sondes) == 0)
-      return(h5("Sélectionnez jusqu'à 4 sondes sur la carte pour afficher les graphiques.",
-                style = "text-align:center;"))
+          if ("chlore1" %in% input$variables_kapta)
+            p <- p + geom_line(aes(y = `Concentration chlore 1 (mg/L)`, color = "Chlore 1 (mg/L)"), size = 1)
 
-    plots <- lapply(sondes, function(id) {
-      plotlyOutput(paste0("plot_global_", id), height = 300)
-    })
-    do.call(tagList, plots)
-  })
+          if ("chlore2" %in% input$variables_kapta)
+            p <- p + geom_line(aes(y = `Concentration chlore 2 (mg/L)`, color = "Chlore 2 (mg/L)"), size = 1)
 
-  # ---- Render plots ----
-  observe({
-    sondes <- selected_sondes()
-    if (length(sondes) == 0) return()
+          if ("temperature" %in% input$variables_kapta)
+            p <- p + geom_line(aes(y = `T° (°C)`), color = "#e17055", linetype = "dashed", size = 0.8)
 
-    for (id in sondes) {
-      local({
-        my_id <- id
-        output[[paste0("plot_global_", my_id)]] <- renderPlotly({
-          type <- substr(my_id, 1, 1)
-          num <- as.numeric(gsub("^[A-Za-z_]+", "", my_id))
+          p <- p +
+            scale_y_continuous(
+              name = "Chlore (mg/L)",
+              sec.axis = sec_axis(~., name = "Température (°C)")
+            ) +
+            scale_color_manual(values = c(
+              "Chlore 1 (mg/L)" = "#007bff",
+              "Chlore 2 (mg/L)" = "#74b9ff"
+            )) +
+            labs(
+              title = paste("Sonde Kapta", my_id),
+              x = "Date",
+              color = ""
+            ) +
+            theme_minimal() +
+            theme(plot.title = element_text(face = "bold"))
 
-          # ===================== KAPTA =====================
-          if (type == "K") {
-            df <- donnees_sondes %>%
-              filter(ENDPOINTREF == as.numeric(num)) %>%
-              filter(DATEREF >= as.POSIXct(input$date_start_global),
-                    DATEREF <= as.POSIXct(input$date_end_global))
+          return(ggplotly(p))
+        }
 
-            if (nrow(df) == 0) {
-              return(plotly_empty(type = "scatter") %>%
-                      layout(title = paste("Sonde", my_id, "- aucune donnée")))
-            }
+        # ===================== PSV =====================
+        if (type == "P") {
+          df <- psv_data %>%
+            filter(Numero == as.numeric(num)) %>%
+            filter(as.Date(Date.de.prelevement) >= as.Date(input$date_start_global),
+                   as.Date(Date.de.prelevement) <= as.Date(input$date_end_global))
 
-            # ---- Reactive plot based on selected variables ----
-            p <- ggplot(df, aes(x = DATEREF))  # use DATEREF not DATE
+          if (nrow(df) == 0)
+            return(plotly_empty(type = "scatter") %>%
+                     layout(title = paste("Sonde", my_id, "- aucune donnée")))
 
-            if ("chlore1" %in% input$variables_kapta)
-              p <- p + geom_line(aes(y = `Concentration chlore 1 (mg/L)`, color = "Chlore 1 (mg/L)"), size = 1)
+          df_filtered <- df %>%
+            filter(Parametre %in% c("Conductiv. (1303)", "C Orga (1841)")) %>%
+            select(Date.de.prelevement, Parametre, Resultat) %>%
+            pivot_wider(names_from = Parametre, values_from = Resultat)
 
-            if ("chlore2" %in% input$variables_kapta)
-              p <- p + geom_line(aes(y = `Concentration chlore 2 (mg/L)`, color = "Chlore 2 (mg/L)"), size = 1)
+          names(df_filtered) <- gsub("Conductiv\\. \\(1303\\)", "Conductivité (µS/cm)", names(df_filtered))
+          names(df_filtered) <- gsub("C Orga \\(1841\\)", "COT (mg/L)", names(df_filtered))
 
-            if ("pression" %in% input$variables_kapta)
-              p <- p + geom_line(aes(y = `Pression (Bar)` * 0.1, color = "Pression (Bar) × 0.1"), linetype = "dotted")
+          p <- ggplot(df_filtered, aes(x = Date.de.prelevement))
 
-            if ("temperature" %in% input$variables_kapta)
-              p <- p + geom_line(aes(y = `T° (°C)` / 100, color = "Température (°C) / 100"), linetype = "dashed")
+          if ("conductivite" %in% input$variables_psv && "Conductivité (µS/cm)" %in% names(df_filtered))
+            p <- p + geom_line(aes(y = `Conductivité (µS/cm)`, color = "Conductivité (µS/cm)"), size = 1)
 
-            p <- p +
-              scale_color_manual(values = c(
-                "Chlore 1 (mg/L)" = "#007bff",
-                "Chlore 2 (mg/L)" = "#74b9ff",
-                "Pression (Bar) × 0.1" = "#55efc4",
-                "Température (°C) / 100" = "#e17055"
-              )) +
-              labs(
-                title = paste("Sonde Kapta", my_id),
-                y = "Valeurs",
-                x = "Date",
-                color = ""
-              ) +
-              theme_minimal() +
-              theme(plot.title = element_text(face = "bold"))
+          if ("cot" %in% input$variables_psv && "COT (mg/L)" %in% names(df_filtered))
+            p <- p + geom_line(aes(y = `COT (mg/L)`, color = "COT (mg/L)"), size = 1)
 
-            return(ggplotly(p))
-          }
+          p <- p +
+            scale_color_manual(values = c(
+              "Conductivité (µS/cm)" = "#0984e3",
+              "COT (mg/L)" = "#d63031"
+            )) +
+            labs(
+              title = paste("Sonde PSV", my_id),
+              y = "Valeurs",
+              x = "Date",
+              color = ""
+            ) +
+            theme_minimal() +
+            theme(plot.title = element_text(face = "bold"))
 
+          ggplotly(p)
+        }
 
-          # ===================== PSV =====================
-          if (type == "P") {
-            df <- psv_data %>%
-              filter(Numero == as.numeric(num)) %>%  # ensure numeric match
-              filter(as.Date(Date.de.prelevement) >= as.Date(input$date_start_global),
-                    as.Date(Date.de.prelevement) <= as.Date(input$date_end_global))
-
-            if (nrow(df) == 0) {
-              return(plotly_empty(type = "scatter") %>%
-                      layout(title = paste("Sonde", my_id, "- aucune donnée")))
-            }
-
-            # --- Filter only Conductivité and COT ---
-            df_filtered <- df %>%
-              filter(Parametre %in% c("Conductiv. (1303)", "C Orga (1841)")) %>%
-              select(Date.de.prelevement, Parametre, Resultat) %>%
-              tidyr::pivot_wider(names_from = Parametre, values_from = Resultat)
-
-            # Rename columns for clarity
-            names(df_filtered) <- gsub("Conductiv\\. \\(1303\\)", "Conductivité (µS/cm)", names(df_filtered))
-            names(df_filtered) <- gsub("C Orga \\(1841\\)", "COT (mg/L)", names(df_filtered))
-
-            # If both missing, return empty plot
-            if (!("Conductivité (µS/cm)" %in% names(df_filtered)) &&
-                !("COT (mg/L)" %in% names(df_filtered))) {
-              return(plotly_empty(type = "scatter") %>%
-                      layout(title = paste("Sonde", my_id, "- Conductivité / COT absentes")))
-            }
-
-            # ---- Safe ggplot construction ----
-            p <- ggplot(df_filtered, aes(x = Date.de.prelevement))
-
-            # match column names after renaming
-            if ("conductivite" %in% input$variables_psv && "Conductivité (µS/cm)" %in% names(df_filtered)) {
-              p <- p + geom_line(aes(y = `Conductivité (µS/cm)`, color = "Conductivité (µS/cm)"), size = 1)
-            }
-
-            if ("cot" %in% input$variables_psv && "COT (mg/L)" %in% names(df_filtered)) {
-              p <- p + geom_line(aes(y = `COT (mg/L)`, color = "COT (mg/L)"), size = 1)
-            }
-
-         # Identify which columns are present (excluding Date)
-            available <- names(df_filtered)[names(df_filtered) != "Date.de.prelevement"]
-
-            p <- p +
-              scale_color_manual(values = c(
-                "Conductivité (µS/cm)" = "#0984e3",
-                "COT (mg/L)" = "#d63031"
-              )) +
-              labs(
-                title = paste("Sonde", my_id),
-                subtitle = paste("Paramètres disponibles :", paste(available, collapse = ", ")),
-                y = "Valeurs",
-                x = "Date",
-                color = ""
-              ) +
-              theme_minimal() +
-              theme(plot.title = element_text(face = "bold"))
-
-            # prevent JS [object Object] errors gracefully
-            tryCatch({
-              ggplotly(p) %>%
-                layout(
-                  title = list(
-                    text = paste0(
-                      "<b>", paste("Sonde", my_id), "</b><br>",
-                      "<span style='font-size:12px; color:gray;'>Paramètres disponibles : ",
-                      paste(available, collapse = ", "), "</span>"
-                    )
-                  )
-                )
-            }, error = function(e) {
-              plotly_empty(type = "scatter") %>%
-                layout(title = paste("Sonde", my_id, "- erreur d'affichage Plotly"))
-            })
-
-          }
           
         })
       })
