@@ -2,10 +2,11 @@ options(download.file.method = "wininet")
 library("openxlsx", character.only = TRUE, options("openxlsx.dateFormat" = "mm/dd/yyyy"))
 library("readxl")
 library(lubridate)
-st_mart2014_2017 = read_excel('../input/obs_ST_MARTIN_VESUBIE_SAPC_2014_2017.xls')
-st_mart2017_2020 = read_excel('../input/obs_ST_MARTIN_VESUBIE_SAPC_mod.xls')
-st_mart2021_2023 = read_excel('../input/obs_ST_MARTIN_VESUBIE_OBS_2021-2023.xls')
-st_mart2023_2025 = read_excel('../input/obs_ST_MARTIN_VESUBIE_OBS_2023-2025.xls')
+st_mart2014_2017 = readxl::read_excel('../prediction_sulfate/input/obs_ST_MARTIN_VESUBIE_SAPC_2014_2017.xls')
+st_mart2017_2020 = readxl::read_excel('../prediction_sulfate/input/obs_ST_MARTIN_VESUBIE_SAPC_mod.xls')
+st_mart2021_2023 = readxl::read_excel('../prediction_sulfate/input/obs_ST_MARTIN_VESUBIE_OBS_2021-2023.xls')
+st_mart2023_2025 = readxl::read_excel('../prediction_sulfate/input/obs_ST_MARTIN_VESUBIE_OBS_2025.xls')
+
 
 meteo_st_martin = rbind(st_mart2014_2017,st_mart2017_2020)
 meteo_st_martin = rbind(meteo_st_martin,st_mart2021_2023)
@@ -45,6 +46,6 @@ meteo_st_martin <- meteo_st_martin %>%
   ungroup() %>%
   select(-jour_mois)  # Nettoyage
 
-write.csv(meteo_st_martin, "../output/meteo_st_martin.csv", row.names = FALSE)
+write.csv(meteo_st_martin, "../prediction_sulfate/output/meteo_st_martin.csv", row.names = FALSE)
 getwd() 
 
