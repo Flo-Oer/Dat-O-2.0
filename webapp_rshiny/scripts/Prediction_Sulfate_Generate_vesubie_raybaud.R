@@ -19,7 +19,7 @@ library(ROSE)
 library("nnet")
 library(Factoshiny)
 
-chemin = "../prediction_sulfate/input"
+chemin = "../data/prediction_sulfate_input"
 
 #Au départ, il faut deux dataframes : 
 #un premier qui contient la colonne Conductivité.mg.L sans décimale, la colonne Concentration.mg.L sans décimale, la colonne temperature avec deux décimales et la colonne jour qui contient la date au format aaaa-mm-jj
@@ -96,7 +96,7 @@ load(paste0(chemin,'meteoFrAPI_06125001.RData'))
 meteo_Saint_martin_dentraunes = meteo_horquot
 meteo_Saint_martin_dentraunes= meteo_Saint_martin_dentraunes %>% filter((date != "2022-12-31" | rr1 != 0.0) & (date != "2020-12-31" | rr1 != 0.0)) #doublons pour 2022 12 31 et 2020 12 31
 
-meteo_St_martin = read.csv(paste0(chemin,'../output/meteo_St_martin.csv')) #J'ai créé ce csv à partir du script St Martin présent dans le dossier
+meteo_St_martin = read.csv(paste0(chemin,'../prediction_sulfate_output/meteo_St_martin.csv')) #J'ai créé ce csv à partir du script St Martin présent dans le dossier
 meteo_St_martin$jour=as.Date(meteo_St_martin$jour)
 meteo_St_martin$St_martin=round(meteo_St_martin$St_martin,2)
 rm(meteo_horquot)
