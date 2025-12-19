@@ -19,7 +19,7 @@ library(ROSE)
 library("nnet")
 library(Factoshiny)
 
-chemin = "input"
+chemin = "../prediction_sulfate/input"
 
 #Au départ, il faut deux dataframes : 
 #un premier qui contient la colonne Conductivité.mg.L sans décimale, la colonne Concentration.mg.L sans décimale, la colonne temperature avec deux décimales et la colonne jour qui contient la date au format aaaa-mm-jj
