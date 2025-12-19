@@ -499,9 +499,71 @@ ui <- fluidPage(
                               h4("Top 5 des points avec le plus de dépassements"),
                               uiOutput("top5_charts")
                             )
+                          ),
+                          tabPanel("Carbone organique total",
+                            fluidPage(
+                              # Titre
+                              h2("Suivi Qualité de l’Eau", style = "color:#337ab7; font-weight:bold;"),
+                              p("Analyse temporelle du Carbone Organique Total, turbidité, chlore et conditions météorologiques."),
+
+                              sidebarLayout(
+                                # Sidebar : filtres
+                                sidebarPanel(
+                                  h4("Filtres"),
+                                  dateRangeInput("date_range", "Choisir la période :", 
+                                                start = Sys.Date()-30, end = Sys.Date()),
+                                  selectInput("station_select", "Sélectionner le point :", 
+                                              choices = c("Saint-Jean-la-Rivière", "Super Rimiez", "Autre point"), 
+                                              selected = "Super Rimiez")
+                                ),
+
+                                # Main Panel : graphiques et alertes
+                                mainPanel(
+                                  # Graphique COT
+                                  plotOutput("cot_plot"),
+
+                                  # Alerte COT
+                                  uiOutput("cot_alert"),
+
+                                  # Graphique Précipitations / Débit
+                                  plotOutput("precip_debit_plot"),
+
+                                  # Graphique Turbidité
+                                  plotOutput("turbidity_plot"),
+
+                                  # Graphique Chlore
+                                  plotOutput("chlorine_plot")
+                                )
+                              )
+                            )
+                          ),# Fin de tab Page COT
+                          tabPanel("Prédictions taux de sulfates",
+                            fluidPage(
+                              h2("Prédictions du taux de sulfates", style = "color:#337ab7; font-weight:bold;"),
+
+                              fileInput(
+                                "sulfate_file",
+                                "Glisser un fichier Excel (.xlsx)",
+                                accept = c(".xlsx")
+                              ),
+
+                              tabsetPanel(
+                                id = "sulfate_tabs",
+
+                                tabPanel(
+                                  "Vésubie",
+                                  br(),
+                                  uiOutput("vesubie_results")
+                                ),
+
+                                tabPanel(
+                                  "Joseph Raybaud",
+                                  br(),
+                                  uiOutput("raybaud_results")
+                                )
+                              )
+                            )
                           )
-
-
 
                  )
                ),
@@ -1218,6 +1280,63 @@ server <- function(input, output, session) {
       })
     }
   })
+
+  
+  cot_data <- reactive({
+    req(input$date_range, input$station_select)
+
+    psv_data %>%
+      mutate(Date = as.Date(Date.de.prelevement, format = "%d/%m/%Y")) %>%
+      filter(
+        Date >= input$date_range[1],
+        Date <= input$date_range[2],
+        Numero == input$station_select,
+        Parametre %in% c(
+          "C Orga (1841)",
+          "Turbidité (NTU)",
+          "Chlore libre (mg/L)"
+        )
+      )
+  })
+
+  output$cot_plot <- renderPlot({
+    df <- cot_data() %>% filter(Parametre == "C Orga (1841)")
+    req(nrow(df) > 0)
+
+    ggplot(df, aes(Date, Resultat)) +
+      geom_line() +
+      geom_hline(yintercept = 2, linetype = "dashed", color = "red") +
+      theme_minimal()
+  })
+
+  output$cot_alert <- renderUI({
+    df <- cot_data() %>% filter(Parametre == "C Orga (1841)")
+    req(nrow(df) > 0)
+
+    if (max(df$Resultat, na.rm = TRUE) > 2) {
+      tags$div("⚠️ Dépassement du seuil COT",
+               style = "color:red; font-weight:bold;")
+    }
+  })
+
+  output$turbidity_plot <- renderPlot({
+    df <- cot_data() %>% filter(Parametre == "Turbidité (NTU)")
+    req(nrow(df) > 0)
+
+    ggplot(df, aes(Date, Resultat)) +
+      geom_line() +
+      theme_minimal()
+  })
+
+  output$chlorine_plot <- renderPlot({
+    df <- cot_data() %>% filter(Parametre == "Chlore libre (mg/L)")
+    req(nrow(df) > 0)
+
+    ggplot(df, aes(Date, Resultat)) +
+      geom_line() +
+      theme_minimal()
+  })
+
 }
 
 # Run the app
