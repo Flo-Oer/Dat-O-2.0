@@ -47,6 +47,7 @@ source("./scripts/Kapta-PSV.R")      # Graphiques généraux KAPTA / PSV
 source("./scripts/Seuil_chlore.R")   # Graphiques et tableau etude de seuil
 source("./scripts/Meteo.R")          # Graphique pluviométrique
 source("./scripts/Seuil_chlore2.R")
+source("./scripts/COT_Analysis.R")   # analise du carbone organique
 
 donnees_psv <- psv_data
 
@@ -415,9 +416,8 @@ ui <- fluidPage(
                           ), # Fin de tab KAPTA/PSV
                           
                           
-                                          # --------Venuja-----------
-                          tabPanel(
-                    "Visualisation Globale",
+      # --------visualisation globale-venuja----------
+                 tabPanel("Visualisation Globale",
                     fluidPage(
                       h3("Visualisation Globale", style = "font-weight:bold; margin-bottom:20px;"),
 
@@ -463,9 +463,8 @@ ui <- fluidPage(
                     )
                   ),
 
-                          # --------Venuja-----------
-                          tabPanel(
-                            "Statistiques Chlore",
+      # --------Statistiques Chlore-----------
+                 tabPanel("Statistiques Chlore",
                             
                             fluidPage(
                               h3("Monitoring Qualité de l'Eau"),
@@ -499,45 +498,110 @@ ui <- fluidPage(
                               h4("Top 5 des points avec le plus de dépassements"),
                               uiOutput("top5_charts")
                             )
-                          ),
-                          tabPanel("Carbone organique total",
-                            fluidPage(
-                              # Titre
-                              h2("Suivi Qualité de l’Eau", style = "color:#337ab7; font-weight:bold;"),
-                              p("Analyse temporelle du Carbone Organique Total, turbidité, chlore et conditions météorologiques."),
-
-                              sidebarLayout(
-                                # Sidebar : filtres
-                                sidebarPanel(
-                                  h4("Filtres"),
-                                  dateRangeInput("date_range", "Choisir la période :", 
-                                                start = Sys.Date()-30, end = Sys.Date()),
-                                  selectInput("station_select", "Sélectionner le point :", 
-                                              choices = c("Saint-Jean-la-Rivière", "Super Rimiez", "Autre point"), 
-                                              selected = "Super Rimiez")
-                                ),
-
-                                # Main Panel : graphiques et alertes
-                                mainPanel(
-                                  # Graphique COT
-                                  plotOutput("cot_plot"),
-
-                                  # Alerte COT
-                                  uiOutput("cot_alert"),
-
-                                  # Graphique Précipitations / Débit
-                                  plotOutput("precip_debit_plot"),
-
-                                  # Graphique Turbidité
-                                  plotOutput("turbidity_plot"),
-
-                                  # Graphique Chlore
-                                  plotOutput("chlorine_plot")
-                                )
-                              )
-                            )
-                          ),# Fin de tab Page COT
-                          tabPanel("Prédictions taux de sulfates",
+                          ), # Fin de page Statictiques chlore
+                 tabPanel("Carbone Organique Total",
+                  
+                  fluidPage(
+                    h2("Analyse du Carbone Organique Total (COT)", 
+                      style = "color: #337ab7; font-weight: bold;"),
+                    
+                    p("Observer l'évolution du chlore en fonction de la ressource et de la météo qui affecte la quantité de matière organique."),
+                    
+                    # --- Filter Panel ---
+                    wellPanel(
+                      h4("Sélection de la période", style = "color: #337ab7;"),
+                      fluidRow(
+                        column(4, 
+                              dateInput("cot_date_start", "Date début:", 
+                                        value = as.Date("2021-03-01"))
+                        ),
+                        column(4, 
+                              dateInput("cot_date_end", "Date fin:", 
+                                        value = as.Date("2021-07-01"))
+                        ),
+                        column(4, 
+                              br(),
+                              actionButton("cot_go_button", "Actualiser", 
+                                          class = "my-button",
+                                          style = "margin-top: 5px;")
+                        )
+                      ),
+                      div(style = "margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;",
+                          tags$b("Seuil d'alerte COT:"), 
+                          tags$span("2 mg/L", style = "color: red; font-weight: bold; margin-left: 10px;"),
+                      )
+                    ),
+                    
+                    # --- Alert Panel (dynamic) ---
+                    uiOutput("cot_alert_ui"),
+                    
+                    # --- Synoptic Diagram ---
+                    wellPanel(
+                      h4("Synoptique des points de mesure", style = "color: #337ab7;"),
+                      p("Emplacement des capteurs sur le réseau", style = "color: gray;"),
+                      div(style = "text-align: center; padding: 20px;",
+                          # Option 1: If you have the image
+                          # imageOutput("cot_synoptic_image", height = "400px")
+                          
+                          # Option 2: Placeholder until image is ready
+                          div(style = "border: 2px dashed #ccc; padding: 40px; background-color: #f8f9fa;",
+                              icon("map-marked-alt", class = "fa-3x", style = "color: #337ab7;"),
+                              h4("Synoptique à fournir", style = "color: gray; margin-top: 20px;")
+                          )
+                      )
+                    ),
+                    
+                    # --- Time Series Graphs ---
+                    wellPanel(
+                      h4("Évolution temporelle des paramètres", style = "color: #337ab7;"),
+                      p("Les graphiques suivants permettent d'observer les corrélations entre COT, météo et qualité de l'eau."),
+                      
+                      # Graph 1: COT
+                      div(style = "margin-bottom: 30px;",
+                          h5("1. Carbone Organique Total (COT)", 
+                            style = "font-weight: bold; color: #337ab7;"),
+                          plotlyOutput("cot_graph", height = "350px"),
+                          hr()
+                      ),
+                      
+                      # Graph 2: Precipitation
+                      div(style = "margin-bottom: 30px;",
+                          h5("2. Précipitations", 
+                            style = "font-weight: bold; color: #337ab7;"),
+                          p("Impact de la météo sur la matière organique", style = "color: gray; font-size: 13px;"),
+                          plotlyOutput("cot_meteo_graph", height = "300px"),
+                          hr()
+                      ),
+                      
+                      # Graph 3: Turbidity
+                      div(style = "margin-bottom: 30px;",
+                          h5("3. Turbidité à Saint-Jean-la-Rivière", 
+                            style = "font-weight: bold; color: #337ab7;"),
+                          p("Qualité de l'eau à la prise d'eau", style = "color: gray; font-size: 13px;"),
+                          plotlyOutput("cot_turbidity_graph", height = "300px"),
+                          hr()
+                      ),
+                      
+                      # Graph 4: Chlorine
+                      div(
+                          h5("4. Chlore en sortie d'usine de Super Rimiez", 
+                            style = "font-weight: bold; color: #337ab7;"),
+                          p("Effet de la matière organique sur le chlore résiduel (chute pendant 2-3 jours)", 
+                            style = "color: gray; font-size: 13px;"),
+                          plotlyOutput("cot_chlore_graph", height = "350px")
+                      )
+                    ),
+                    
+                    # --- Data Export ---
+                    wellPanel(
+                      h4("Export des données", style = "color: #337ab7;"),
+                      downloadButton("cot_download_data", "Télécharger les données COT (CSV)", 
+                                    class = "btn-success")
+                    )
+                  )
+                ),# Fin de tab Page COT
+                          
+                 tabPanel("Prédictions taux de sulfates",
                             fluidPage(
                               h2("Prédictions du taux de sulfates", style = "color:#337ab7; font-weight:bold;"),
 
@@ -565,9 +629,9 @@ ui <- fluidPage(
                             )
                           )
 
-                 )
-               ),
-             )
+                 ) # fin de tabset
+               ), # fin de tab panel page principale
+             ) # fin de navabar
   
   
 )  # Fin de ui
@@ -931,9 +995,6 @@ server <- function(input, output, session) {
       })
     }
   })
-
-
-
 
 
 
@@ -1336,7 +1397,93 @@ server <- function(input, output, session) {
       geom_line() +
       theme_minimal()
   })
+## COT (aya)
+ observeEvent(input$cot_go_button, {
+  tryCatch({
+    # Validate dates
+    if (input$cot_date_start >= input$cot_date_end) {
+      shinyalert(text = "La date début doit être avant la date fin")
+      return()
+    }
+    
+    # Generate outputs
+    output$cot_graph <- renderPlotly({
+      create_cot_plot(input$cot_date_start, input$cot_date_end)
+    })
+    
+    output$cot_meteo_graph <- renderPlotly({
+      create_plot_meteo(input$cot_date_start, input$cot_date_end)
+    })
+    
+    output$cot_turbidity_graph <- renderPlotly({
+      create_turbidity_plot(input$cot_date_start, input$cot_date_end)
+    })
+    
+    output$cot_chlore_graph <- renderPlotly({
+      create_chlore_super_rimiez_plot(input$cot_date_start, input$cot_date_end)
+    })
+    
+    # Check for alerts
+    alert_info <- check_cot_alerts(input$cot_date_start, input$cot_date_end)
+    
+    output$cot_alert_ui <- renderUI({
+      if (!is.null(alert_info) && alert_info$has_alert) {
+        div(
+          class = "alert alert-danger",
+          style = "margin: 20px 0; padding: 20px; border-radius: 5px; background-color: #f8d7da; border: 1px solid #f5c6cb;",
+          fluidRow(
+            column(1, 
+                   icon("exclamation-triangle", class = "fa-3x", 
+                        style = "color: #721c24;")
+            ),
+            column(11,
+                   h4("ALERTE: Dépassement du seuil COT", 
+                      style = "margin-top: 0; color: #721c24;"),
+                   p(style = "margin-bottom: 5px;",
+                     tags$b("Nombre de dépassements détectés:"), 
+                     tags$span(alert_info$n_alerts, style = "color: #721c24; font-weight: bold;")
+                   ),
+                   p(style = "margin-bottom: 5px;",
+                     tags$b("Valeur maximale:"), 
+                     tags$span(paste0(round(alert_info$max_value, 2), " mg/L"), 
+                              style = "color: #721c24; font-weight: bold;")
+                   ),
+                   p(style = "margin-bottom: 0;",
+                     tags$b("Dernier dépassement:"), 
+                     format(alert_info$last_alert_date, "%d/%m/%Y"),
+                     " - Secteur:", alert_info$last_alert_sector
+                   )
+            )
+          )
+        )
+      } else {
+        div(
+          class = "alert alert-success",
+          style = "margin: 20px 0; padding: 15px; border-radius: 5px;",
+          icon("check-circle"), 
+          " Aucun dépassement du seuil COT détecté sur la période sélectionnée."
+        )
+      }
+    })
+    
+  }, error = function(err) {
+    shinyalert(text = paste("Erreur:", err$message))
+  })
+})
 
+# Download handler
+output$cot_download_data <- downloadHandler(
+  filename = function() {
+    paste0("donnees_cot_", 
+           format(input$cot_date_start, "%Y%m%d"), "_",
+           format(input$cot_date_end, "%Y%m%d"), ".csv")
+  },
+  content = function(file) {
+    df <- filter_cot_data(input$cot_date_start, input$cot_date_end)
+    write.csv(df, file, row.names = FALSE, fileEncoding = "UTF-8")
+  }
+)
+## end of COT
 }
 
 # Run the app
