@@ -445,18 +445,67 @@ ui <- fluidPage(
                                           selected = c("conductivite"))
                       ),
 
-                      # --- Section: Carte + Menu déroulant ---
+                       # --- Section: Carte + Menu déroulant ---
                       wellPanel(
                         h4("Localisation et sélection des sondes", style = "color:#337ab7;"),
-                        selectInput("sensor_selector", "Sélectionnez jusqu'à 4 sondes :", choices = NULL, multiple = TRUE),
+
+                        selectizeInput(
+                          "sensor_selector",
+                          "Sélectionnez des sondes (✕ pour retirer une sonde) :",
+                          choices = NULL,
+                          multiple = TRUE,
+                          options = list(
+                            plugins = list("remove_button"),
+                            placeholder = "Choisissez une ou plusieurs sondes"
+                          )
+                        ),
+
+                        fluidRow(
+                          column(
+                            6,
+                            actionButton(
+                              "show_selected_sensors",
+                              "Afficher les sondes sélectionnées",
+                              icon = icon("chart-line"),
+                              class = "btn-primary"
+                            )
+                          ),
+                          column(
+                            6,
+                            actionButton(
+                              "show_all_sensors",
+                              "Afficher toutes les sondes",
+                              icon = icon("layer-group"),
+                              class = "btn-warning"
+                            )
+                          ),
+
+                          column(
+                              4,
+                              actionButton(
+                                "clear_selected_sensors",
+                                "Tout désélectionner",
+                                icon = icon("trash"),
+                                class = "btn-danger"
+                              )
+                            ),
+
+                        ),
+
+                        br(),
+
                         leafletOutput("global_map", height = 400),
-                        tags$div("Zone de Nice – Carte interactive des sondes", 
-                                style = "text-align:center; margin-top:10px;")
+
+                        tags$div(
+                          "Zone de Nice – Carte interactive des sondes",
+                          style = "text-align:center; margin-top:10px;"
+                        )
                       ),
+
 
                       # --- Section: Graphiques ---
                       wellPanel(
-                        h5("Sélectionnez jusqu'à 4 sondes sur la carte ou le menu ci-dessus pour afficher les graphiques.",
+                        h5("Sélectionnez des sondes puis cliquez sur « Afficher les sondes sélectionnées » ou affichez toutes les sondes.",
                           style = "text-align:center; margin-bottom:20px;"),
                         uiOutput("global_graphs")
                       )
@@ -486,7 +535,20 @@ ui <- fluidPage(
                                       ),
                                       selected = "above"
                                     )
-                                  )
+                                  ),
+
+                                  column(
+                                      3,
+                                      radioButtons(
+                                        "metric_type",
+                                        "Critère d'affichage :",
+                                        choices = c(
+                                          "Nombre de dépassements" = "count",
+                                          "Pourcentage de dépassements" = "percent"
+                                        ),
+                                        selected = "percent"
+                                      )
+                                    )
 
                               ),
                               
@@ -495,10 +557,12 @@ ui <- fluidPage(
                               leafletOutput("chlore_map", height = 400),
                               
                               br(),
-                              h4("Top 5 des points avec le plus de dépassements"),
                               uiOutput("top5_charts")
                             )
                           ), # Fin de page Statictiques chlore
+
+
+                  # --------Analyse COT-----------
                  tabPanel("Carbone Organique Total",
                   
                   fluidPage(
@@ -791,71 +855,77 @@ server <- function(input, output, session) {
 
   # ---- Logical condition for exceedance ----
   is_exceedance <- reactive({
-    if (input$exceed_direction == "above") {
-      function(x) !is.na(x) & x > input$chlore_threshold
+  if (input$exceed_direction == "above") {
+      function(x) !is.na(x) & x >= input$chlore_threshold
     } else {
-      function(x) !is.na(x) & x < input$chlore_threshold
+      function(x) !is.na(x) & x <= input$chlore_threshold
     }
+  })
+
+  # ---- Per-sensor statistics (central table) ----
+  sensor_stats <- reactive({
+    df <- base_chlore_data()
+    cond <- is_exceedance()
+
+    df %>%
+      group_by(Numero) %>%
+      summarise(
+        total_mesures = n(),
+        nb_depassements = sum(cond(Resultat), na.rm = TRUE),
+        pct_depassements = round(nb_depassements / total_mesures * 100, 2),
+        .groups = "drop"
+      ) %>%
+      filter(total_mesures > 0)
+  })
+
+    sorted_sensors <- reactive({
+    stats <- sensor_stats()
+    req(nrow(stats) > 0)
+
+    stats <- if (input$metric_type == "count") {
+      stats %>% arrange(desc(nb_depassements))
+    } else {
+      stats %>% arrange(desc(pct_depassements))
+    }
+
+    stats %>% slice_head(n = 100)
   })
 
 
   output$top5_charts <- renderUI({
-    df <- base_chlore_data()
-    if (nrow(df) == 0) return(h4("Aucune donnée disponible."))
+  stats <- sorted_sensors()
 
-    cond <- is_exceedance()
+  if (nrow(stats) == 0)
+    return(h4("Aucune donnée disponible."))
 
-    top_sensors <- df %>%
-      group_by(Numero) %>%
-      summarise(
-        depassements = sum(cond(Resultat), na.rm = TRUE),
-        .groups = "drop"
-      ) %>%
-      arrange(desc(depassements)) %>%
-      slice_head(n = 5)
-
-    if (nrow(top_sensors) == 0)
-      return(h4("Aucun dépassement pour ces paramètres."))
-
-    tagList(
-      lapply(seq_len(nrow(top_sensors)), function(i) {
-        tagList(
-          fluidRow(
-            column(
-              10,
-              h4(paste("Sonde", top_sensors$Numero[i]))
-            ),
-            column(
-              2,
-              downloadButton(
-                outputId = paste0("download_sensor_", i),
-                label = "",
-                icon = icon("download")
-              )
+  tagList(
+    lapply(seq_len(nrow(stats)), function(i) {
+      tagList(
+        fluidRow(
+          column(10, h4(paste("Sonde", stats$Numero[i]))),
+          column(
+            2,
+            downloadButton(
+              paste0("download_sensor_", i),
+              label = "",
+              icon = icon("download")
             )
-          ),
-          plotlyOutput(paste0("plot_", i))
-        )
-      })
-    )
-  })
+          )
+        ),
+        plotlyOutput(paste0("plot_", i))
+      )
+    })
+  )
+})
+
 
 
   output$chlore_map <- renderLeaflet({
-    df <- base_chlore_data()
-    if (nrow(df) == 0) return(NULL)
+    stats <- sensor_stats()
+    if (nrow(stats) == 0) return(NULL)
 
-    cond <- is_exceedance()
-
-    df_summary <- df %>%
-      group_by(Numero) %>%
-      summarise(
-        depassements = sum(cond(Resultat), na.rm = TRUE),
-        .groups = "drop"
-      ) %>%
-      filter(depassements > 0)
-
-    df_summary <- df_summary %>%
+    # ---- Join with positions ----
+    stats <- stats %>%
       left_join(
         position_PSV %>%
           st_drop_geometry() %>%
@@ -864,41 +934,58 @@ server <- function(input, output, session) {
       ) %>%
       filter(!is.na(XWGS84), !is.na(YWGS84))
 
-    df_summary$color <- cut(
-      df_summary$depassements,
-      breaks = c(-Inf, 5, 10, 20, Inf),
-      labels = c("green", "yellow", "orange", "red")
+    # ---- Choose metric ----
+    value_col <- if (input$metric_type == "count") {
+      stats$nb_depassements
+    } else {
+      stats$pct_depassements
+    }
+
+    # ---- Color scale ----
+    pal <- colorBin(
+      palette = c("green", "yellow", "orange", "red"),
+      bins = if (input$metric_type == "count") {
+        c(0, 5, 10, 20, Inf)
+      } else {
+        c(0, 20, 40, 60, 100)
+      },
+      domain = value_col
     )
 
-    leaflet(df_summary) %>%
+    leaflet(stats) %>%
       addTiles() %>%
       addCircleMarkers(
         ~XWGS84, ~YWGS84,
-        color = ~as.character(color),
-        label = ~paste0("Sonde ", Numero, ": ", depassements, " dépassements"),
+        color = ~pal(value_col),
         radius = 8,
-        fillOpacity = 0.8
+        fillOpacity = 0.8,
+        label = ~paste0(
+          "Sonde ", Numero,
+          " | Nombre de dépassements : ", nb_depassements,
+          " | Pourcentage : ", pct_depassements, " %"
+        )
       ) %>%
       addLegend(
         "bottomright",
-        colors = c("green", "yellow", "orange", "red"),
-        labels = c("<= 5", "6–10", "11–20", "> 20"),
-        title = "Dépassements"
+        pal = pal,
+        values = value_col,
+        title = ifelse(
+          input$metric_type == "count",
+          "Nombre de dépassements",
+          "Pourcentage de dépassements"
+        )
       )
   })
 
 
   observeEvent(
-  list(
-    base_chlore_data(),
-    input$chlore_threshold,
-    input$exceed_direction
-  ), {
+    sorted_sensors(), {
+
     df <- base_chlore_data()
     if (nrow(df) == 0) return()
 
     # ---- Clear previous plots & downloads (avoid leftovers) ----
-  for (i in 1:5) {
+  for (i in 1:100) {
     output[[paste0("plot_", i)]] <- renderPlotly(NULL)
     output[[paste0("download_sensor_", i)]] <- downloadHandler(
       filename = function() "",
@@ -906,21 +993,20 @@ server <- function(input, output, session) {
     )
   }
 
-    cond <- is_exceedance()
 
-    top_sensors <- df %>%
-      group_by(Numero) %>%
-      summarise(
-        depassements = sum(cond(Resultat), na.rm = TRUE),
-        .groups = "drop"
-      ) %>%
-      arrange(desc(depassements)) %>%
-      slice_head(n = 5)
+    stats <- sorted_sensors()
 
-    for (i in seq_len(nrow(top_sensors))) {
+    for (i in seq_len(nrow(stats))) {
       local({
         idx <- i
-        sensor_id <- top_sensors$Numero[idx]
+        sensor_id <- stats$Numero[idx]
+
+        metric_label <- if (input$metric_type == "count") {
+        paste0("Nombre de dépassements : ", stats$nb_depassements[idx])
+      } else {
+        paste0("Pourcentage de dépassements : ", stats$pct_depassements[idx], " %")
+      }
+
 
         # ---- GRAPH (ALL VALUES, NO FILTERING) ----
         output[[paste0("plot_", idx)]] <- renderPlotly({
@@ -957,14 +1043,28 @@ server <- function(input, output, session) {
               linetype = "dashed"
             ) +
             labs(
-              title = paste("Sonde", sensor_id),
               x = "Date",
               y = "Chlore (mg/L)"
             ) +
             theme_minimal() +
             theme(plot.title = element_text(face = "bold"))
 
-          ggplotly(p, tooltip = "text")
+          ggplotly(p, tooltip = "text") %>%
+            layout(
+              annotations = list(
+                list(
+                  x = 0,
+                  y = 1.05,
+                  xref = "paper",
+                  yref = "paper",
+                  text = metric_label,
+                  showarrow = FALSE,
+                  xanchor = "left",
+                  font = list(size = 12, color = "black")
+                )
+              )
+            )
+
         })
 
         # ---- CSV EXPORT ----
@@ -1006,6 +1106,47 @@ server <- function(input, output, session) {
 
   selected_sondes <- reactiveVal(character(0))
 
+  displayed_sondes <- reactiveVal(character(0))
+
+  # ---- CLEAR ALL SELECTED SENSORS ----
+  observeEvent(input$clear_selected_sensors, {
+
+    # Clear internal selections
+    selected_sondes(character(0))
+    displayed_sondes(character(0))
+
+    # Clear dropdown UI
+    updateSelectizeInput(
+      session,
+      "sensor_selector",
+      selected = character(0)
+    )
+ })
+
+
+  observeEvent(input$show_selected_sensors, {
+  req(length(selected_sondes()) > 0)
+  displayed_sondes(selected_sondes())
+  })
+
+  observeEvent(input$show_all_sensors, {
+
+  # Build the list of ALL sensor IDs (Kapta + PSV)
+  all_kapta_ids <- position_sondes %>%
+    mutate(ID = paste0("K_", ENDPOINTREF)) %>%
+    pull(ID)
+
+  all_psv_ids <- position_PSV %>%
+    st_drop_geometry() %>%
+    mutate(ID = paste0("P_", Numero)) %>%
+    pull(ID)
+
+  displayed_sondes(c(all_kapta_ids, all_psv_ids))
+ })
+
+
+
+
   observe({
     req(position_sondes, position_PSV)
 
@@ -1025,10 +1166,6 @@ server <- function(input, output, session) {
 
   observeEvent(input$sensor_selector, {
     sel <- input$sensor_selector
-    if (length(sel) > 4) {
-      sel <- tail(sel, 4)
-      updateSelectInput(session, "sensor_selector", selected = sel)
-    }
     selected_sondes(sel)
   })
 
@@ -1070,7 +1207,6 @@ server <- function(input, output, session) {
       cur <- setdiff(cur, id)
     } else {
       cur <- c(cur, id)
-      if (length(cur) > 4) cur <- tail(cur, 4)
     }
 
     selected_sondes(cur)
@@ -1103,18 +1239,18 @@ server <- function(input, output, session) {
   })
 
   output$selected_sondes_count <- renderText({
-    paste(length(selected_sondes()), "/ 4 sondes selectionnees")
+    paste(length(selected_sondes()), "sondes sélectionnées")
   })
 
   output$global_graphs <- renderUI({
-    req(selected_sondes())
-    tagList(lapply(selected_sondes(), function(id) plotlyOutput(paste0("plot_", id), height = 320)))
+    req(displayed_sondes())
+    tagList(lapply(displayed_sondes(), function(id) plotlyOutput(paste0("plot_", id), height = 320)))
   })
 
   observe({
-    req(selected_sondes())
+    req(displayed_sondes())
 
-    for (sid in selected_sondes()) {
+    for (sid in displayed_sondes()) {
       local({
         my_id <- sid
 
@@ -1139,16 +1275,39 @@ server <- function(input, output, session) {
               summarise(
                 chlore1 = mean(`Concentration chlore 1 (mg/L)`, na.rm = TRUE),
                 chlore2 = mean(`Concentration chlore 2 (mg/L)`, na.rm = TRUE),
-                temperature = if (!is.na(temp_col))
-                  mean(.data[[temp_col]], na.rm = TRUE)
-                else NA_real_,
+
+               temperature_raw = if (!is.na(temp_col)) {
+               suppressWarnings(
+                mean(as.numeric(.data[[temp_col]]), na.rm = TRUE)
+                  )
+                } else {
+                  NA_real_
+                },
+
+
+                temperature_scaled = temperature_raw / 100,
+
                 .groups = "drop"
               ) %>%
               arrange(DATEREF)
 
 
+
             if (nrow(df) == 0) return(plotly_empty())
 
+            # ---- SAFETY CHECK: nothing numeric to display ----
+            has_chlore1 <- "chlore1" %in% input$variables_kapta &&
+                          any(is.finite(df$chlore1))
+
+            has_chlore2 <- "chlore2" %in% input$variables_kapta &&
+                          any(is.finite(df$chlore2))
+
+            has_temp <- "temperature" %in% input$variables_kapta &&
+                        any(is.finite(df$temperature_scaled))
+
+            if (!has_chlore1 && !has_chlore2 && !has_temp) {
+              return(plotly_empty())
+            }
 
             p <- ggplot(df, aes(x = DATEREF))
 
@@ -1162,10 +1321,10 @@ server <- function(input, output, session) {
                   text = paste0(
                     "Date : ", DATEREF,
                     "<br>Chlore 1 : ", round(chlore1, 3), " mg/L",
-                    "<br>Température : ", round(temperature, 1), " °C"
+                    "<br>Température réelle : ", round(temperature_raw, 1), " °C"
                   )
                 ),
-                linewidth = 1.2,
+                linewidth = 0.8,
                 na.rm = TRUE
               )
 
@@ -1183,42 +1342,36 @@ server <- function(input, output, session) {
                     text = paste0(
                       "Date : ", DATEREF,
                       "<br>Chlore 2 : ", round(chlore2, 3), " mg/L",
-                      "<br>Température : ", round(temperature, 1), " °C"
+                      "<br>Température réelle : ", round(temperature_raw, 1), " °C"
                     )
                   ),
-                  linewidth = 1.2,
+                  linewidth = 0.8,
                   na.rm = TRUE
                 )
 
             }
 
-      # ---- Always add primary Y axis ----
-              p <- p + scale_y_continuous(name = "Chlore (mg/L)")
-
+              
+              
               # ---- Optional temperature (same axis, dashed) ----
-              if ("temperature" %in% input$variables_kapta &&
-                  any(!is.na(df$temperature))) {
-
-                p <- p + geom_line(
-                  aes(
-                    x = DATEREF,
-                    y = temperature,
-                    group = 1,
-                    color = "Température (°C)",
-                    text = paste0(
-                      "Date : ", DATEREF,
-                      "<br>Température : ", round(temperature, 1), " °C"
-                    )
-                  ),
-                  linetype = "dashed",
-                  linewidth = 1.2,
-                  na.rm = TRUE
-                )
-
-            
-
-              }
-
+             if (has_temp) {
+              p <- p + geom_line(
+                aes(
+                  x = DATEREF,
+                  y = temperature_scaled,
+                  group = 1,
+                  color = "Température (÷100)",
+                  text = paste0(
+                    "Date : ", DATEREF,
+                    "<br>Température (affichée) : ", round(temperature_scaled, 3),
+                    "<br>Température réelle : ", round(temperature_raw, 1), " °C"
+                  )
+                ),
+                linetype = "dashed",
+                linewidth = 1.2,
+                na.rm = TRUE
+              )
+            }
 
 
             p <- p +
@@ -1230,112 +1383,145 @@ server <- function(input, output, session) {
               theme_minimal() +
               theme(plot.title = element_text(face = "bold"))
 
-            return(
+           return(
               ggplotly(p, tooltip = "text") %>%
-                layout(legend = list(itemclick = "toggle"))
+                layout(
+                  yaxis = list(
+                    tickmode = "auto",
+                    nticks = 10
+                  ),
+                  legend = list(itemclick = "toggle")
+                )
             )
+
           }
 
             if (type == "P") {
 
-            df <- psv_data %>%
-              filter(
-                Numero == num,
-                Date.de.prelevement >= input$date_start_global,
-                Date.de.prelevement <= input$date_end_global,
-                Parametre %in% c("Conductiv. (1303)", "COT (1305)")
+              df <- psv_data %>%
+                filter(
+                  Numero == num,
+                  Date.de.prelevement >= input$date_start_global,
+                  Date.de.prelevement <= input$date_end_global,
+                  Parametre %in% c("Conductiv. (1303)", "COT (1305)")
+                )
+
+              if (nrow(df) == 0) return(plotly_empty())
+
+              show_cond <- "conductivite" %in% input$variables_psv
+              show_cot  <- "cot" %in% input$variables_psv
+
+              # ---- Numeric conversion (VERY IMPORTANT) ----
+              df_wide <- df %>%
+              mutate(Resultat_num = suppressWarnings(as.numeric(Resultat))) %>%
+              group_by(Date.de.prelevement, Parametre) %>%
+              summarise(
+                Resultat_num = mean(Resultat_num, na.rm = TRUE),
+                .groups = "drop"
+              ) %>%
+              tidyr::pivot_wider(
+                names_from = Parametre,
+                values_from = Resultat_num
               )
 
-            if (nrow(df) == 0) return(plotly_empty())
 
-         show_cond <- "conductivite" %in% input$variables_psv
-        show_cot  <- "cot" %in% input$variables_psv
+              # ---- Availability checks ----
+              has_cond <- show_cond &&
+                "Conductiv. (1303)" %in% names(df_wide) &&
+                any(is.finite(df_wide$`Conductiv. (1303)`))
 
-        # ---- Build wide table once ----
-        df_wide <- df %>%
-          select(Date.de.prelevement, Parametre, Resultat) %>%
-          tidyr::pivot_wider(names_from = Parametre, values_from = Resultat)
+              cot_exists <- show_cot && "COT (1305)" %in% names(df_wide)
+              cot_has_values <- cot_exists && any(is.finite(df_wide$`COT (1305)`))
 
-        # ---- If COT is selected but not available ----
-        if (show_cot && !"COT (1305)" %in% names(df_wide)) {
-          p <- ggplot() +
-            annotate(
-              "text",
-              x = 0.5,
-              y = 0.5,
-              label = "Paramètre COT non disponible pour cette sonde",
-              size = 5
-            ) +
-            theme_void() +
-            labs(title = paste("Sonde PSV", num))
+              # ---- Nothing to display at all ----
+             if (!has_cond && !show_cot) {
+                return(plotly_empty())
+              }
 
-          return(ggplotly(p))
-        }
+              p <- ggplot(df_wide, aes(x = Date.de.prelevement))
 
+              # ---- Conductivity (ALWAYS shown if available) ----
+              if (has_cond) {
+                p <- p + geom_line(
+                  aes(
+                    y = `Conductiv. (1303)`,
+                    group = 1,
+                    color = "Conductivité",
+                    text = paste0(
+                      "Date : ", as.character(Date.de.prelevement),
+                      "<br>Conductivité : ",
+                      round(`Conductiv. (1303)`, 1), " µS/cm"
+                    )
+                  ),
+                  linewidth = 1.2,
+                  na.rm = TRUE
+                )
+              }
 
-            p <- ggplot(df_wide, aes(x = Date.de.prelevement))
-
-            # ---- Conductivité ----
-            if (show_cond && "Conductiv. (1303)" %in% names(df_wide)) {
-              p <- p + geom_line(
-                aes(
-                  x = Date.de.prelevement,
-                  y = `Conductiv. (1303)`,
-                  group = 1,                     # ← THIS IS THE KEY FIX
-                  color = "Conductivité",
-                  text = paste0(
-                    "Date : ", Date.de.prelevement,
-                    "<br>Conductivité : ",
-                    round(`Conductiv. (1303)`, 1), " µS/cm"
+              # ---- COT (only if available) ----
+              if (cot_has_values) {
+                p <- p + geom_line(
+                  aes(
+                    y = `COT (1305)`,
+                    group = 1,
+                    color = "COT",
+                    text = paste0(
+                      "Date : ", as.character(Date.de.prelevement),
+                      "<br>COT : ",
+                      round(`COT (1305)`, 2), " mg/L"
+                    )
+                  ),
+                  linewidth = 1,
+                  linetype = "dashed",
+                  na.rm = TRUE
+                ) +
+                  geom_point(
+                    aes(y = `COT (1305)`, color = "COT"),
+                    size = 2,
+                    na.rm = TRUE
                   )
-                ),
-                linewidth = 1.2,                 # slightly thicker so it’s visible
-                na.rm = TRUE
-              )
+              }
 
+          # ---- Message ONLY if COT selected but unavailable ----
+              if (cot_exists && !cot_has_values) {
+                p <- p + annotate(
+                  "label",
+                  x = min(df_wide$Date.de.prelevement, na.rm = TRUE),
+                  y = max(df_wide$`Conductiv. (1303)`, na.rm = TRUE),
+                  label = "COT non disponible pour cette sonde",
+                  hjust = 0,
+                  vjust = 1.2,
+                  size = 4,
+                  label.size = 0,
+                  fill = "gray90",
+                  color = "gray30"
+                )
+              }
+
+
+              p <- p +
+                labs(
+                  title = paste("Sonde PSV", num),
+                  x = "Date",
+                  y = "Valeur",
+                  color = "Afficher / masquer"
+                ) +
+                theme_minimal() +
+                theme(plot.title = element_text(face = "bold"))
+
+             return(
+                ggplotly(p, tooltip = "text") %>%
+                  layout(
+                    yaxis = list(
+                      tickmode = "auto",
+                      nticks = 10
+                    ),
+                    legend = list(itemclick = "toggle")
+                  )
+              )
 
             }
 
-            # ---- COT ----
-            if (show_cot && "COT (1305)" %in% names(df_wide)) {
-              p <- p + geom_line(
-                aes(
-                  y = `COT (1305)`,
-                  color = "COT",
-                  text = paste0(
-                    "Date : ", Date.de.prelevement,
-                    "<br>COT : ", round(`COT (1305)`, 2), " mg/L"
-                  )
-                ),
-                linewidth = 1,
-                linetype = "dashed",
-                na.rm = TRUE
-              )
-              p <- p + geom_point(
-                aes(
-                  y = `COT (1305)`,
-                  color = "COT"
-                ),
-                size = 2,
-                na.rm = TRUE
-              )
-            }
-
-            p <- p +
-              labs(
-                title = paste("Sonde PSV", num),
-                x = "Date",
-                y = "Valeur",
-                color = "Afficher / masquer"
-              ) +
-              theme_minimal() +
-              theme(plot.title = element_text(face = "bold"))
-
-            return(
-              ggplotly(p, tooltip = "text") %>%
-                layout(legend = list(itemclick = "toggle"))
-            )
-          }
 
         })
       })
@@ -1343,6 +1529,7 @@ server <- function(input, output, session) {
   })
 
   
+  # -------- COT (aya) --------
   cot_data <- reactive({
     req(input$date_range, input$station_select)
 
