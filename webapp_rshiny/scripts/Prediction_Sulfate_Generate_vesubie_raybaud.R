@@ -19,7 +19,7 @@ library(ROSE)
 library("nnet")
 library(Factoshiny)
 
-chemin = "../data/prediction_sulfate_input"
+chemin = "C:/Users/hp/Desktop/Dat-O-2.0/webapp_rshiny/data/prediction_sulfate_input/"
 
 #Au départ, il faut deux dataframes : 
 #un premier qui contient la colonne Conductivité.mg.L sans décimale, la colonne Concentration.mg.L sans décimale, la colonne temperature avec deux décimales et la colonne jour qui contient la date au format aaaa-mm-jj
@@ -45,9 +45,8 @@ importer_donnees_sulfates = function(chemin_fichier){
 
 data_S04_Ves = importer_donnees_sulfates(paste0(chemin,"Données sulfates et conductivités Vésubie.xlsx"))
 
-temperature_ves = read.xlsx("Données températures in situ Vesubie et Raybaud.xlsx",sheet = 1,colNames=TRUE,detectDates = TRUE,startRow = 2)
+temperature_ves = read.xlsx(paste0(chemin,"Données températures in situ Vesubie et Raybaud.xlsx"),sheet = 1,colNames=TRUE,detectDates = TRUE,startRow = 2)
 temperature_ves = temperature_ves %>% dplyr::select(Date.de.prélèvement,Résultat) %>% group_by(Date.de.prélèvement) %>%  summarise(temperature = round(mean(Résultat, na.rm = TRUE),digits=2), .groups = "drop")
-
 
 data_S04_Ves = data_S04_Ves %>% rename('jour'='Date de prélèvement')
 temperature_ves = temperature_ves %>% rename('jour'= Date.de.prélèvement)
@@ -188,7 +187,7 @@ meteo =  meteo %>%
 meteo = meteo %>% dplyr::select(-num_poste)
 meteo = left_join(meteo,meteo_St_martin)
 
-rm(meteo_ante_2023,meteo_Ascros,meteo_Berthemont,meteo_Carros,meteo_Coursegoules,meteo_Lantosque,meteo_Le_mas,meteo_Levens,meteo_Luceram,meteo_Nice,meteo_Peone,meteo_Puget,meteo_Rimplas,meteo_Saint_martin_dentraunes,meteo_St_Et,meteo_St_Martin,vec_meteo,liste_meteo,liste_meteo_sans_poste,df_meteo_avant_2023,df,meteo_St_martin)
+rm(meteo_ante_2023,meteo_Ascros,meteo_Berthemont,meteo_Carros,meteo_Coursegoules,meteo_Lantosque,meteo_Le_mas,meteo_Levens,meteo_Luceram,meteo_Nice,meteo_Peone,meteo_Puget,meteo_Rimplas,meteo_Saint_martin_dentraunes,meteo_St_Et,vec_meteo,liste_meteo,liste_meteo_sans_poste,df_meteo_avant_2023,df,meteo_St_martin)
 
 data_S04_Ves_meteo = merge(data_S04_Ves,meteo,by="jour")
 data_S04_Ves_meteo = data_S04_Ves_meteo %>% filter(!is.na(jour))
@@ -344,7 +343,7 @@ for (index in names(villes_groupes)) {
   }
 }
 
-rm(df_temp,resultats,villes_groupes,index,ville,villes)
+rm(df_temp,resultats_ves,villes_groupes,index,ville,villes)
 
 #A la fin de cette étape, on a notre base de donnée de travail complète, il faut
 #à présent choisir les variables
@@ -389,8 +388,8 @@ acp_Ves$quanti.sup$cor
 
 #Il faut modifier la liste de variables dans le select manuellement si on change de base
 set.seed(124)
-vec_variables = c(temperature,Concentration.mg.L,Conductivité.µS.cm)###### ici, il faut ajouter les variables retenues par l'ACP
-rf_dataframe_ves <- data_S04_Ves_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(vec_variables) %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L> 200, 1 , 0)))
+vec_variables = c("temperature","Concentration.mg.L","Conductivité.µS.cm")###### ici, il faut ajouter les variables retenues par l'ACP
+rf_dataframe_ves <- data_S04_Ves_meteo %>% filter(year(jour) >= 2017 | month(jour) >= 03) %>% dplyr::select(all_of(vec_variables)) %>% mutate(alerte = as.factor(ifelse(Concentration.mg.L> 200, 1 , 0)))
 
 base_cah_Ves <- rf_dataframe_ves %>% dplyr::select(-alerte)
 
@@ -456,7 +455,9 @@ set.seed(23)
 
 
 #choix des var explicatives (à modifier si changement de base de données)
-cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_46","cumul_glissant_Puget_53","cumul_glissant_Lantosque_87","cumul_glissant_Luceram_54","cumul_glissant_Coursegoules_86")
+#cols=c("temperature","Conductivité.µS.cm","cumul_glissant_Peone_46","cumul_glissant_Puget_53","cumul_glissant_Lantosque_87","cumul_glissant_Luceram_54","cumul_glissant_Coursegoules_86")
+cols <- c("temperature", "Conductivité.µS.cm",
+          grep("^cumul_glissant_", colnames(df_train), value = TRUE))
 
 #pour standariser/déstandariser 
 means <- sapply(df_train[, cols], mean)
