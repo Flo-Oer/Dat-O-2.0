@@ -48,6 +48,7 @@ source("./scripts/Seuil_chlore.R")   # Graphiques et tableau etude de seuil
 source("./scripts/Meteo.R")          # Graphique pluviométrique
 source("./scripts/Seuil_chlore2.R")
 source("./scripts/COT_Analysis.R")   # analise du carbone organique
+source("./scripts/Sulfate_Prediction.R") # script de prediction sulfate
 
 donnees_psv <- psv_data
 
@@ -1528,7 +1529,6 @@ server <- function(input, output, session) {
     }
   })
 
-  
   # -------- COT (aya) --------
   cot_data <- reactive({
     req(input$date_range, input$station_select)
@@ -1669,9 +1669,97 @@ output$cot_download_data <- downloadHandler(
     df <- filter_cot_data(input$cot_date_start, input$cot_date_end)
     write.csv(df, file, row.names = FALSE, fileEncoding = "UTF-8")
   }
-)
-## end of COT
-}
+)## end of COT
+
+# PRÉDICTIONS SULFATES – VÉSUBIE UNIQUEMENT
+
+uploaded_sulfate_data <- reactiveVal(NULL)
+
+observeEvent(input$sulfate_file, {
+  req(input$sulfate_file)
+  uploaded_sulfate_data(input$sulfate_file$datapath)
+})
+
+output$vesubie_results <- renderUI({
+
+  if (is.null(uploaded_sulfate_data())) {
+    return(
+      wellPanel(
+        style = "text-align:center; padding:40px;",
+        icon("upload", class = "fa-3x", style = "color:#337ab7;"),
+        h4("Téléchargez un fichier Excel"),
+        p("Colonnes requises : temperature, Conductivité.µS.cm, cumul_glissant_*")
+      )
+    )
+  }
+
+  result <- predict_sulfate_vesubie(uploaded_sulfate_data())
+
+  if (!result$success) {
+    return(div(class = "alert alert-danger", result$error))
+  }
+
+  summary <- result$summary
+
+  risk_class <- if (summary$n_critical > 0) "danger"
+  else if (summary$n_warning > 0) "warning"
+  else "success"
+
+  risk_text <- if (summary$n_critical > 0) "🔴 RISQUE CRITIQUE"
+  else if (summary$n_warning > 0) "🟡 ATTENTION"
+  else "🟢 PAS DE RISQUE"
+
+  output$vesubie_prediction_table <- DT::renderDataTable({
+    result$data %>%
+      mutate(
+        Alerte = case_when(
+          alert_level == 2 ~ "🔴 Critique",
+          alert_level == 1 ~ "🟡 Attention",
+          TRUE ~ "🟢 Normal"
+        )
+      ) %>%
+      select(jour, temperature, Conductivité.µS.cm, pred_sulfate, Alerte) %>%
+      rename(
+        Date = jour,
+        `Température (°C)` = temperature,
+        `Conductivité (µS/cm)` = Conductivité.µS.cm,
+        `Sulfates prédits (mg/L)` = pred_sulfate
+      )
+  })
+
+  tagList(
+    div(class = paste("alert alert-", risk_class),
+        style = "font-size:18px; font-weight:bold;",
+        risk_text),
+
+    fluidRow(
+      column(4, wellPanel(h3(summary$n_critical), "Critiques")),
+      column(4, wellPanel(h3(summary$n_warning), "Alertes")),
+      column(4, wellPanel(h3(summary$n_safe), "Normales"))
+    ),
+
+    div(
+      class = "alert alert-info",
+      paste0("Max : ", round(summary$max_concentration,1), " mg/L | Moyenne : ",
+             round(summary$avg_concentration,1), " mg/L")
+    ),
+
+    hr(),
+    DT::dataTableOutput("vesubie_prediction_table")
+  )
+})
+
+
+
+output$raybaud_results <- renderUI({
+  wellPanel(
+    icon("ban", class="fa-2x"),
+    h4("Modèle Joseph Raybaud non disponible"),
+    p("Aucun modèle entraîné pour ce site.")
+  )
+}) # end of sulfate
+
+}# end server function
 
 # Run the app
 shinyApp(ui, server)

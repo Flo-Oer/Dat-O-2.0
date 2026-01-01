@@ -512,6 +512,14 @@ F1_GI <- TP_w / Total_possible #ratio des deux qui se lit comme un F1 classique
 cat("\n","F1-GI avec pondération :", round(F1_GI, 4))
 ################################################################################
 
+################ save models ###################################################
+# dir.create("webapp_rshiny/models", showWarnings = FALSE)
+
+# # Vésubie
+# saveRDS(rf.fit_clust, "webapp_rshiny/models/vesubie_rf_cluster.rds")
+# saveRDS(nn, "webapp_rshiny/models/vesubie_nnet.rds")
+# saveRDS(list(means = means, sds = sds), "webapp_rshiny/models/vesubie_scaler.rds")
+
 
 #Le modèle final est stocké sous le nom nn
 # ATTENTION alerte predite == 0 =/= concentration <180 mg/L. Les observations des groupes 2 3 et 4 ont toutes alerte predite == 0
