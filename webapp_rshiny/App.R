@@ -638,23 +638,7 @@ ui <- fluidPage(
                           hr()
                       ),
                       
-                      # Graph 3: Turbidity
-                      div(style = "margin-bottom: 30px;",
-                          h5("3. Turbidité à Saint-Jean-la-Rivière", 
-                            style = "font-weight: bold; color: #337ab7;"),
-                          p("Qualité de l'eau à la prise d'eau", style = "color: gray; font-size: 13px;"),
-                          plotlyOutput("cot_turbidity_graph", height = "300px"),
-                          hr()
-                      ),
-                      
-                      # Graph 4: Chlorine
-                      div(
-                          h5("4. Chlore en sortie d'usine de Super Rimiez", 
-                            style = "font-weight: bold; color: #337ab7;"),
-                          p("Effet de la matière organique sur le chlore résiduel (chute pendant 2-3 jours)", 
-                            style = "color: gray; font-size: 13px;"),
-                          plotlyOutput("cot_chlore_graph", height = "350px")
-                      )
+                
                     ),
                     
                     # --- Data Export ---
@@ -838,9 +822,10 @@ server <- function(input, output, session) {
     "Pas de donnees pour ces parametres"
   })
 
-  # -------- Venuja --------
+
   # -------- Statistiques chlore --------
   # ---- Base data (ALWAYS full data) ----
+  # Filter PSV data to chlore units within selected date range
   base_chlore_data <- reactive({
     df <- psv_data %>%
       filter(Unite %in% c("mg(Cl2)/L (165)"))
@@ -856,6 +841,7 @@ server <- function(input, output, session) {
 
   # ---- Logical condition for exceedance ----
   is_exceedance <- reactive({
+  # Build a comparator based on user direction/threshold
   if (input$exceed_direction == "above") {
       function(x) !is.na(x) & x >= input$chlore_threshold
     } else {
@@ -868,6 +854,7 @@ server <- function(input, output, session) {
     df <- base_chlore_data()
     cond <- is_exceedance()
 
+    # Aggregate total measures and exceedance rates per sensor
     df %>%
       group_by(Numero) %>%
       summarise(
@@ -883,6 +870,7 @@ server <- function(input, output, session) {
     stats <- sensor_stats()
     req(nrow(stats) > 0)
 
+    # Order by selected metric and keep top 100
     stats <- if (input$metric_type == "count") {
       stats %>% arrange(desc(nb_depassements))
     } else {
@@ -899,6 +887,7 @@ server <- function(input, output, session) {
   if (nrow(stats) == 0)
     return(h4("Aucune donnée disponible."))
 
+  # Build per-sensor plot containers + download buttons
   tagList(
     lapply(seq_len(nrow(stats)), function(i) {
       tagList(
@@ -936,6 +925,7 @@ server <- function(input, output, session) {
       filter(!is.na(XWGS84), !is.na(YWGS84))
 
     # ---- Choose metric ----
+    # Switch between counts and percentages for display
     value_col <- if (input$metric_type == "count") {
       stats$nb_depassements
     } else {
@@ -943,6 +933,7 @@ server <- function(input, output, session) {
     }
 
     # ---- Color scale ----
+    # Use fixed bins for each metric type
     pal <- colorBin(
       palette = c("green", "yellow", "orange", "red"),
       bins = if (input$metric_type == "count") {
@@ -1002,6 +993,7 @@ server <- function(input, output, session) {
         idx <- i
         sensor_id <- stats$Numero[idx]
 
+        # Label for the metric shown above each chart
         metric_label <- if (input$metric_type == "count") {
         paste0("Nombre de dépassements : ", stats$nb_depassements[idx])
       } else {
@@ -1011,6 +1003,7 @@ server <- function(input, output, session) {
 
         # ---- GRAPH (ALL VALUES, NO FILTERING) ----
         output[[paste0("plot_", idx)]] <- renderPlotly({
+          # Aggregate time series per day for this sensor
           df_sensor <- df %>%
           filter(Numero == sensor_id) %>%
           group_by(Date.de.prelevement) %>%
@@ -1069,6 +1062,7 @@ server <- function(input, output, session) {
         })
 
         # ---- CSV EXPORT ----
+        # Export raw records for the selected sensor
         output[[paste0("download_sensor_", idx)]] <- downloadHandler(
           filename = function() {
             paste0(
@@ -1100,11 +1094,13 @@ server <- function(input, output, session) {
 
 
   # -------- Visualisation globale (Venuja) --------
+  # Helper to find available temperature column in Kapta data
   detect_temp_column <- function(df) {
     possible <- c("T° (°C)", "Temperature", "Temp")
     intersect(possible, names(df))[1]
   }
 
+  # Track selected sensors and those currently displayed in graphs
   selected_sondes <- reactiveVal(character(0))
 
   displayed_sondes <- reactiveVal(character(0))
@@ -1127,6 +1123,7 @@ server <- function(input, output, session) {
 
   observeEvent(input$show_selected_sensors, {
   req(length(selected_sondes()) > 0)
+  # Show only the sensors chosen via map or dropdown
   displayed_sondes(selected_sondes())
   })
 
@@ -1151,6 +1148,7 @@ server <- function(input, output, session) {
   observe({
     req(position_sondes, position_PSV)
 
+    # Build dropdown choices with readable labels
     kapta_choices <- position_sondes %>%
       mutate(ID = paste0("K_", ENDPOINTREF), Label = paste0("Kapta ", ENDPOINTREF, " - ", Site)) %>%
       select(ID, Label)
@@ -1166,6 +1164,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$sensor_selector, {
+    # Keep internal selection in sync with dropdown
     sel <- input$sensor_selector
     selected_sondes(sel)
   })
@@ -1173,6 +1172,7 @@ server <- function(input, output, session) {
   output$global_map <- renderLeaflet({
     req(position_sondes, position_PSV)
 
+    # Merge Kapta and PSV point data for a single map
     kapta <- position_sondes %>%
       mutate(ID = paste0("K_", ENDPOINTREF), Type = "Kapta", Label = paste0("Kapta ", ENDPOINTREF, " - ", Site))
 
@@ -1182,6 +1182,7 @@ server <- function(input, output, session) {
 
     all_pts <- bind_rows(kapta, psv)
 
+    # Base map with colored markers by type
     leaflet(all_pts) %>%
       addTiles() %>%
       addCircleMarkers(
@@ -1201,6 +1202,7 @@ server <- function(input, output, session) {
   })
 
   observeEvent(input$global_map_marker_click, {
+    # Toggle a sensor when clicking its marker
     id <- input$global_map_marker_click$id
     cur <- selected_sondes()
 
@@ -1217,6 +1219,7 @@ server <- function(input, output, session) {
   observe({
     req(position_sondes, position_PSV)
 
+    # Refresh map marker colors based on current selection
     kapta <- position_sondes %>%
       mutate(ID = paste0("K_", ENDPOINTREF), Type = "Kapta", Label = paste0("Kapta ", ENDPOINTREF, " - ", Site))
 
@@ -1240,11 +1243,13 @@ server <- function(input, output, session) {
   })
 
   output$selected_sondes_count <- renderText({
+    # Display count of selected sensors
     paste(length(selected_sondes()), "sondes sélectionnées")
   })
 
   output$global_graphs <- renderUI({
     req(displayed_sondes())
+    # One plot container per displayed sensor
     tagList(lapply(displayed_sondes(), function(id) plotlyOutput(paste0("plot_", id), height = 320)))
   })
 
@@ -1256,6 +1261,7 @@ server <- function(input, output, session) {
         my_id <- sid
 
         output[[paste0("plot_", my_id)]] <- renderPlotly({
+          # Build plots by sensor type (Kapta vs PSV)
           type <- substr(my_id, 1, 1)
           num <- as.numeric(sub("^[KP]_", "", my_id))
 
@@ -1269,6 +1275,7 @@ server <- function(input, output, session) {
 
             if (nrow(raw_df) == 0) return(plotly_empty())
 
+            # Resolve temperature column name dynamically
             temp_col <- detect_temp_column(raw_df)
 
             df <- raw_df %>%
@@ -1312,6 +1319,7 @@ server <- function(input, output, session) {
 
             p <- ggplot(df, aes(x = DATEREF))
 
+            # Kapta chlore series (optional by checkbox)
             if ("chlore1" %in% input$variables_kapta) {
               p <- p + geom_line(
                 aes(
@@ -1333,6 +1341,7 @@ server <- function(input, output, session) {
 
             }
 
+            # Second chlore series (optional)
             if ("chlore2" %in% input$variables_kapta) {
               p <- p + geom_line(
                   aes(
@@ -1384,6 +1393,7 @@ server <- function(input, output, session) {
               theme_minimal() +
               theme(plot.title = element_text(face = "bold"))
 
+           # Return interactive plotly chart
            return(
               ggplotly(p, tooltip = "text") %>%
                 layout(
@@ -1399,6 +1409,7 @@ server <- function(input, output, session) {
 
             if (type == "P") {
 
+              # PSV: keep Conductivity and COT only
               df <- psv_data %>%
                 filter(
                   Numero == num,
@@ -1510,6 +1521,7 @@ server <- function(input, output, session) {
                 theme_minimal() +
                 theme(plot.title = element_text(face = "bold"))
 
+             # Return interactive plotly chart
              return(
                 ggplotly(p, tooltip = "text") %>%
                   layout(
@@ -1529,133 +1541,111 @@ server <- function(input, output, session) {
     }
   })
 
-  # -------- COT (aya) --------
-  cot_data <- reactive({
-    req(input$date_range, input$station_select)
 
-    psv_data %>%
-      mutate(Date = as.Date(Date.de.prelevement, format = "%d/%m/%Y")) %>%
-      filter(
-        Date >= input$date_range[1],
-        Date <= input$date_range[2],
-        Numero == input$station_select,
-        Parametre %in% c(
-          "C Orga (1841)",
-          "Turbidité (NTU)",
-          "Chlore libre (mg/L)"
-        )
-      )
-  })
+  # -------- COT  --------
 
-  output$cot_plot <- renderPlot({
-    df <- cot_data() %>% filter(Parametre == "C Orga (1841)")
-    req(nrow(df) > 0)
+## COT 
+ # -------- COT (FIXED & WORKING) --------
+observeEvent(input$cot_go_button, {
 
-    ggplot(df, aes(Date, Resultat)) +
-      geom_line() +
-      geom_hline(yintercept = 2, linetype = "dashed", color = "red") +
-      theme_minimal()
-  })
+  # ---- Date validation ----
+  if (input$cot_date_start >= input$cot_date_end) {
+    shinyalert(text = "La date début doit être avant la date fin")
+    return()
+  }
 
-  output$cot_alert <- renderUI({
-    df <- cot_data() %>% filter(Parametre == "C Orga (1841)")
-    req(nrow(df) > 0)
+  # ---- Filter COT data (CORRECT PARAM NAME) ----
+  cot_df <- psv_data %>%
+    mutate(Date = as.Date(Date.de.prelevement)) %>%
+    filter(
+      Date >= input$cot_date_start,
+      Date <= input$cot_date_end,
+      Parametre == "C Orga (1841)"
+    ) %>%
+    mutate(Resultat = suppressWarnings(as.numeric(Resultat))) %>%
+    arrange(Date)
 
-    if (max(df$Resultat, na.rm = TRUE) > 2) {
-      tags$div("⚠️ Dépassement du seuil COT",
-               style = "color:red; font-weight:bold;")
-    }
-  })
 
-  output$turbidity_plot <- renderPlot({
-    df <- cot_data() %>% filter(Parametre == "Turbidité (NTU)")
-    req(nrow(df) > 0)
+  # ---- COT GRAPH ----
+  output$cot_graph <- renderPlotly({
 
-    ggplot(df, aes(Date, Resultat)) +
-      geom_line() +
-      theme_minimal()
-  })
-
-  output$chlorine_plot <- renderPlot({
-    df <- cot_data() %>% filter(Parametre == "Chlore libre (mg/L)")
-    req(nrow(df) > 0)
-
-    ggplot(df, aes(Date, Resultat)) +
-      geom_line() +
-      theme_minimal()
-  })
-## COT (aya)
- observeEvent(input$cot_go_button, {
-  tryCatch({
-    # Validate dates
-    if (input$cot_date_start >= input$cot_date_end) {
-      shinyalert(text = "La date début doit être avant la date fin")
-      return()
-    }
-    
-    # Generate outputs
-    output$cot_graph <- renderPlotly({
-      create_cot_plot(input$cot_date_start, input$cot_date_end)
-    })
-    
-    output$cot_meteo_graph <- renderPlotly({
-      create_plot_meteo(input$cot_date_start, input$cot_date_end)
-    })
-    
-    output$cot_turbidity_graph <- renderPlotly({
-      create_turbidity_plot(input$cot_date_start, input$cot_date_end)
-    })
-    
-    output$cot_chlore_graph <- renderPlotly({
-      create_chlore_super_rimiez_plot(input$cot_date_start, input$cot_date_end)
-    })
-    
-    # Check for alerts
-    alert_info <- check_cot_alerts(input$cot_date_start, input$cot_date_end)
-    
-    output$cot_alert_ui <- renderUI({
-      if (!is.null(alert_info) && alert_info$has_alert) {
-        div(
-          class = "alert alert-danger",
-          style = "margin: 20px 0; padding: 20px; border-radius: 5px; background-color: #f8d7da; border: 1px solid #f5c6cb;",
-          fluidRow(
-            column(1, 
-                   icon("exclamation-triangle", class = "fa-3x", 
-                        style = "color: #721c24;")
-            ),
-            column(11,
-                   h4("ALERTE: Dépassement du seuil COT", 
-                      style = "margin-top: 0; color: #721c24;"),
-                   p(style = "margin-bottom: 5px;",
-                     tags$b("Nombre de dépassements détectés:"), 
-                     tags$span(alert_info$n_alerts, style = "color: #721c24; font-weight: bold;")
-                   ),
-                   p(style = "margin-bottom: 5px;",
-                     tags$b("Valeur maximale:"), 
-                     tags$span(paste0(round(alert_info$max_value, 2), " mg/L"), 
-                              style = "color: #721c24; font-weight: bold;")
-                   ),
-                   p(style = "margin-bottom: 0;",
-                     tags$b("Dernier dépassement:"), 
-                     format(alert_info$last_alert_date, "%d/%m/%Y"),
-                     " - Secteur:", alert_info$last_alert_sector
-                   )
+    if (nrow(cot_df) == 0) {
+      return(
+        plotly_empty() %>%
+          layout(
+            annotations = list(
+              list(
+                text = "Aucune donnée COT disponible pour cette période",
+                x = 0.5, y = 0.5,
+                xref = "paper", yref = "paper",
+                showarrow = FALSE,
+                font = list(size = 16)
+              )
             )
           )
-        )
-      } else {
-        div(
-          class = "alert alert-success",
-          style = "margin: 20px 0; padding: 15px; border-radius: 5px;",
-          icon("check-circle"), 
-          " Aucun dépassement du seuil COT détecté sur la période sélectionnée."
-        )
-      }
-    })
+      )
+    }
+
+    plot_ly(
+  cot_df,
+  x = ~Date,
+  y = ~Resultat,
+  type = "scatter",
+  mode = "lines+markers",
+  name = "COT (mg/L)",
+  line = list(color = "darkorange")
+) %>%
+  layout(
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "COT (mg/L)"),
+    shapes = list(
+      list(
+        type = "line",
+        x0 = min(cot_df$Date),
+        x1 = max(cot_df$Date),
+        y0 = 2,
+        y1 = 2,
+        line = list(color = "red", dash = "dash")
+      )
+    )
+  )
     
-  }, error = function(err) {
-    shinyalert(text = paste("Erreur:", err$message))
+
+
+
   })
+
+  # ---- ALERT ----
+  output$cot_alert_ui <- renderUI({
+    if (nrow(cot_df) > 0 && any(cot_df$Resultat > 2, na.rm = TRUE)) {
+      div(
+        class = "alert alert-danger",
+        icon("exclamation-triangle"),
+        strong("ALERTE : "),
+        "COT > 2 mg/L détecté sur la période sélectionnée"
+      )
+    } else {
+      div(
+        class = "alert alert-success",
+        icon("check-circle"),
+        "Aucun dépassement du seuil COT détecté sur la période sélectionnée."
+      )
+    }
+  })
+
+  # ---- METEO GRAPH (already working) ----
+  output$cot_meteo_graph <- renderPlotly({
+
+  p <- create_plot_meteo(input$cot_date_start, input$cot_date_end)
+
+  # Force line display
+  p$x$data[[1]]$type <- "scatter"
+  p$x$data[[1]]$mode <- "lines+markers"
+
+  p
+  
+}) 
+
 })
 
 # Download handler
@@ -1666,10 +1656,21 @@ output$cot_download_data <- downloadHandler(
            format(input$cot_date_end, "%Y%m%d"), ".csv")
   },
   content = function(file) {
-    df <- filter_cot_data(input$cot_date_start, input$cot_date_end)
+    df <- psv_data %>%
+      mutate(Date = as.Date(Date.de.prelevement)) %>%
+      filter(
+        Date >= input$cot_date_start,
+        Date <= input$cot_date_end,
+        Parametre == "C Orga (1841)"
+      ) %>%
+      arrange(Date)
+
     write.csv(df, file, row.names = FALSE, fileEncoding = "UTF-8")
   }
 )## end of COT
+
+
+
 
 # PRÉDICTIONS SULFATES – VÉSUBIE UNIQUEMENT
 
