@@ -4,38 +4,56 @@ library(caret)
 library(dplyr)
 library(readxl)
 
-# ============================================================================
-# PREDICTION FUNCTION FOR VÉSUBIE
-# ============================================================================
+# fonction pour charger les données téléchargées
+load_uploaded_data <- function(uploaded_file) {
+  ext <- tools::file_ext(uploaded_file)
+
+  if (ext == "csv") {
+    data <- read.csv(
+      uploaded_file,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+  } else if (ext %in% c("xlsx", "xls")) {
+    data <- readxl::read_excel(uploaded_file)
+  } else {
+    stop("Format de fichier non supporté.")
+  }
+
+  return(data)
+}
+
+# Fonction de prediction des taux de sulfates pour la Vésubie
+
 predict_sulfate_vesubie <- function(uploaded_file) {
 
-  data_new <- readxl::read_excel(uploaded_file)
+  data_new <- load_uploaded_data(uploaded_file)
 
   rf_model <- readRDS("models/vesubie_rf_cluster.rds")
   nn_model <- readRDS("models/vesubie_nnet.rds")
   scaler   <- readRDS("models/vesubie_scaler.rds")
 
-  # SAME columns as training
   cols <- c(
     "temperature",
     "Conductivité.µS.cm",
     grep("^cumul_glissant_", names(data_new), value = TRUE)
   )
 
-  # cluster prediction
+  missing_cols <- setdiff(cols, names(data_new))
+  if (length(missing_cols) > 0) {
+    stop(paste("Colonnes manquantes :", paste(missing_cols, collapse = ", ")))
+  }
+
   data_new$groupe <- predict(rf_model, data_new[, cols])
 
-  # scaling
   X_new <- scale(
     data_new[, cols],
     center = scaler$means,
     scale  = scaler$sds
   )
 
-  # sulfate prediction
   data_new$pred_sulfate <- predict(nn_model, X_new)
 
-  # alert logic (SAME as training)
   data_new$alert_level <- ifelse(
     data_new$groupe == 1,
     ifelse(data_new$pred_sulfate > 200, 2,
@@ -43,17 +61,16 @@ predict_sulfate_vesubie <- function(uploaded_file) {
     0
   )
 
-  return(list(
-  success = TRUE,
-  data = data_new,
-  summary = list(
-    n_critical = sum(data_new$alert_level == 2, na.rm = TRUE),
-    n_warning  = sum(data_new$alert_level == 1, na.rm = TRUE),
-    n_safe     = sum(data_new$alert_level == 0, na.rm = TRUE),
-    max_concentration = max(data_new$pred_sulfate, na.rm = TRUE)
+  list(
+    success = TRUE,
+    data = data_new,
+    summary = list(
+      n_critical = sum(data_new$alert_level == 2, na.rm = TRUE),
+      n_warning  = sum(data_new$alert_level == 1, na.rm = TRUE),
+      n_safe     = sum(data_new$alert_level == 0, na.rm = TRUE),
+      max_concentration = max(data_new$pred_sulfate, na.rm = TRUE)
+    )
   )
-))
-
 }
 
 # ============================================================================

@@ -605,10 +605,10 @@ ui <- fluidPage(
                       h4("Synoptique des points de mesure", style = "color: #337ab7;"),
                       p("Emplacement des capteurs sur le réseau", style = "color: gray;"),
                       div(style = "text-align: center; padding: 20px;",
-                          # Option 1: If you have the image
+                          # Si vous avez l'image prête, décommentez la ligne ci-dessous et commentez le div suivant
                           # imageOutput("cot_synoptic_image", height = "400px")
                           
-                          # Option 2: Placeholder until image is ready
+                          # Espace réservé en attendant que l'image soit prête
                           div(style = "border: 2px dashed #ccc; padding: 40px; background-color: #f8f9fa;",
                               icon("map-marked-alt", class = "fa-3x", style = "color: #337ab7;"),
                               h4("Synoptique à fournir", style = "color: gray; margin-top: 20px;")
@@ -621,7 +621,7 @@ ui <- fluidPage(
                       h4("Évolution temporelle des paramètres", style = "color: #337ab7;"),
                       p("Les graphiques suivants permettent d'observer les corrélations entre COT, météo et qualité de l'eau."),
                       
-                      # Graph 1: COT
+                      # Graph de carbone organique total (COT)
                       div(style = "margin-bottom: 30px;",
                           h5("1. Carbone Organique Total (COT)", 
                             style = "font-weight: bold; color: #337ab7;"),
@@ -629,7 +629,7 @@ ui <- fluidPage(
                           hr()
                       ),
                       
-                      # Graph 2: Precipitation
+                      # Graph de précipitations de météo
                       div(style = "margin-bottom: 30px;",
                           h5("2. Précipitations", 
                             style = "font-weight: bold; color: #337ab7;"),
@@ -648,16 +648,16 @@ ui <- fluidPage(
                                     class = "btn-success")
                     )
                   )
-                ),# Fin de tab Page COT
-                          
+                ),# Fin de tab Page carbone organique total
+                # --------Prédiction Sulfates-----------  
                  tabPanel("Prédictions taux de sulfates",
                             fluidPage(
                               h2("Prédictions du taux de sulfates", style = "color:#337ab7; font-weight:bold;"),
 
                               fileInput(
                                 "sulfate_file",
-                                "Glisser un fichier Excel (.xlsx)",
-                                accept = c(".xlsx")
+                                "Glisser un fichier Excel ou CSV",
+                                accept = c(".xlsx", ".xls",".csv")
                               ),
 
                               tabsetPanel(
