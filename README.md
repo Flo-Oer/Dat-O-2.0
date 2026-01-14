@@ -24,37 +24,7 @@ Le projet vise à fournir une interface interactive permettant :
 
 ## Structure du projet
 
-webapp_rshiny/
-│
-├── data/
-│   ├── raw/                    # Données brutes (non modifiées)
-│   ├── clean/                  # Données nettoyées et prêtes pour les modèles
-│   ├── prediction_sulfate/     # Données spécifiques à la prédiction des sulfates
-│
-├── docs/                       # Documentation et éléments de référence
-│
-├── models/                     # Modèles ML entraînés sauvegardés (.rds)
-│
-├── scripts/
-│   ├── Carto_2.R               # Scripts de cartographie
-│   ├── COT_Analysis.R          # Analyses statistiques
-│   ├── Graphes.R               # Génération de graphiques
-│   ├── Kapta-PSV.R             # Analyses PSV
-│   ├── Meteo.R                 # Prétraitement des données météorologiques
-│   ├── Prediction_Sulfate.R    # Script principal de prédiction des sulfates
-│   ├── Seuil_chlore.R          # Calcul des seuils chlore
-│   ├── Seuil_chlore2.R         # Variante du calcul des seuils
-│   └── Sulfate_*.R             # Scripts liés aux sulfates
-│
-├── www/
-│   ├── HTML/                   # Pages HTML intégrées à la webapp
-│   └── Image/                  # Images utilisées dans l’interface
-│
-├── App.R                      # Application Shiny (UI + Server)
-├── P4A_DATO.Rproj              # Projet RStudio
-├── webapp_screenshot.png
-└── README.md
-
+![webapp structure](./webapp_rshiny/webapp_structure.png)
 
 ## prediction_sulfate
 
