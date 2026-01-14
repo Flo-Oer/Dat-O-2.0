@@ -60,6 +60,31 @@ Webapp a integrer dans le systeme global de Dato
 
 Travail en cours
 
+## Difficultés rencontrées
+
+- Le modèle de prédiction des sulfates a été entraîné sur les données de la station de la Vésubie (CRIPE), puis sauvegardé sous forme de modèle sérialisé afin d’être réutilisé dans la webapp Shiny.
+
+- Lors de l’intégration du modèle dans l’application, un problème est apparu lors de la lecture des fichiers d’entrée par le modèle. Le script échouait lorsque certaines variables attendues par le modèle n’étaient pas présentes ou ne portaient pas exactement le même nom.
+
+- Après analyse, le problème principal provenait d’un décalage entre :
+  - la structure des données utilisées lors de l’entraînement du modèle,
+  - et la structure des données chargées dynamiquement dans la webapp.
+
+- En particulier, certaines variables liées aux cumuls de pluie et aux lags temporels étaient générées dynamiquement dans les scripts initiaux et n’étaient pas systématiquement disponibles dans les données fournies à l’application.
+
+## Pistes d’amélioration
+
+- Dans les scripts initiaux développés par Clément Barcaroli, plusieurs jeux de données (météorologiques, hydrologiques, qualité de l’eau) sont combinés afin de produire un jeu de données final unique utilisé pour l’entraînement du modèle.
+
+- Une amélioration envisagée serait de reproduire exactement ce pipeline de génération des données en amont de la webapp, afin de garantir une parfaite cohérence entre les données d’entraînement et les données utilisées en production.
+
+- Faute de temps (soutenance prévue le 15 janvier), cette refonte complète du pipeline de données n’a pas pu être finalisée.
+
+- L’intégration actuelle démontre néanmoins les étapes clés du processus :
+  1. entraînement du modèle,
+  2. sauvegarde du modèle,
+  3. intégration du modèle dans l’application Shiny pour la prédiction.
+
 ### Execution
 
 ```
