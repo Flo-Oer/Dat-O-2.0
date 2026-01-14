@@ -262,7 +262,7 @@ analyser_correlation_precipitation_cumul <- function(df_mesures, meteo_df, max_l
     correlation = numeric(),
     stringsAsFactors = FALSE
   )
-  
+ 
   for (station in stations) {
     vec <- numeric(max_lag)
     
