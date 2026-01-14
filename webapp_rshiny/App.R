@@ -1542,10 +1542,7 @@ server <- function(input, output, session) {
   })
 
 
-  # -------- COT  --------
-
-## COT 
- # -------- COT (FIXED & WORKING) --------
+ # -------- server de carbone organique total  --------
 observeEvent(input$cot_go_button, {
 
   # ---- Date validation ----
@@ -1554,7 +1551,7 @@ observeEvent(input$cot_go_button, {
     return()
   }
 
-  # ---- Filter COT data (CORRECT PARAM NAME) ----
+  # ---- Filtrer les données COT (NOM DE PARAMÈTRE CORRECT) ----
   cot_df <- psv_data %>%
     mutate(Date = as.Date(Date.de.prelevement)) %>%
     filter(
@@ -1566,7 +1563,7 @@ observeEvent(input$cot_go_button, {
     arrange(Date)
 
 
-  # ---- COT GRAPH ----
+  # ---- graph COT ----
   output$cot_graph <- renderPlotly({
 
     if (nrow(cot_df) == 0) {
@@ -1633,7 +1630,7 @@ observeEvent(input$cot_go_button, {
     }
   })
 
-  # ---- METEO GRAPH (already working) ----
+  # ---- graph de meteo ----
   output$cot_meteo_graph <- renderPlotly({
 
   p <- create_plot_meteo(input$cot_date_start, input$cot_date_end)
@@ -1648,7 +1645,7 @@ observeEvent(input$cot_go_button, {
 
 })
 
-# Download handler
+# Gestionnaire de téléchargement des données de COT filtrées
 output$cot_download_data <- downloadHandler(
   filename = function() {
     paste0("donnees_cot_", 
@@ -1668,11 +1665,8 @@ output$cot_download_data <- downloadHandler(
     write.csv(df, file, row.names = FALSE, fileEncoding = "UTF-8")
   }
 )## end of COT
-
-
-
-
-# PRÉDICTIONS SULFATES – VÉSUBIE UNIQUEMENT
+# --------- Sulfates prédictions ---------
+# PRÉDICTIONS SULFATES VÉSUBIE
 
 uploaded_sulfate_data <- reactiveVal(NULL)
 
@@ -1706,17 +1700,17 @@ output$vesubie_results <- renderUI({
   else if (summary$n_warning > 0) "warning"
   else "success"
 
-  risk_text <- if (summary$n_critical > 0) "🔴 RISQUE CRITIQUE"
-  else if (summary$n_warning > 0) "🟡 ATTENTION"
-  else "🟢 PAS DE RISQUE"
+  risk_text <- if (summary$n_critical > 0) "RISQUE CRITIQUE"
+  else if (summary$n_warning > 0) "ATTENTION"
+  else "PAS DE RISQUE"
 
   output$vesubie_prediction_table <- DT::renderDataTable({
     result$data %>%
       mutate(
         Alerte = case_when(
-          alert_level == 2 ~ "🔴 Critique",
-          alert_level == 1 ~ "🟡 Attention",
-          TRUE ~ "🟢 Normal"
+          alert_level == 2 ~ "Critique",
+          alert_level == 1 ~ "Attention",
+          TRUE ~ "Normal"
         )
       ) %>%
       select(jour, temperature, Conductivité.µS.cm, pred_sulfate, Alerte) %>%
