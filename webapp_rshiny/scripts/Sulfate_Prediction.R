@@ -28,7 +28,7 @@ load_uploaded_data <- function(uploaded_file) {
 predict_sulfate_vesubie <- function(uploaded_file) {
 
   data_new <- load_uploaded_data(uploaded_file) # Charger les données téléchargées
-
+  
   # Charger les modèles pré-entraînés
   rf_model <- readRDS("models/vesubie_rf_cluster.rds")
   nn_model <- readRDS("models/vesubie_nnet.rds")
